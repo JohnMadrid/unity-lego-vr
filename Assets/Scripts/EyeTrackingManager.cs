@@ -16,7 +16,7 @@ public class EyeTrackingManager : MonoBehaviour
         Debug.Log("Initializing Eye Tracking...");
 
         // Request gaze calibration at startup
-        if (EyeTrackingExample.RequestGazeCalibration())
+        if (EyeTrackingExample.RequestGazeCalibration()) // EyeTracingExample is file in VarjoUnityXR Plugin for ET under Runtime > EyeTracking
         {
             Debug.Log("Eye tracking calibrated.");
         }
