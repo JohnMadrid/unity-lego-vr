@@ -2,21 +2,20 @@ using System;
 using System.IO;
 using System.Collections.Generic;
 using UnityEngine;
-using Varjo.XR; 
+using Varjo.XR;
 
 public class EyeTrackingManager : MonoBehaviour
 {
     private StreamWriter writer;
     private bool logging = false;
     private string filePath;
-    private List<string> gazeDataLog = new List<string>();
 
     void Start()
     {
         Debug.Log("Initializing Eye Tracking...");
 
         // Request gaze calibration at startup
-        if (EyeTrackingExample.RequestGazeCalibration()) // EyeTracingExample is file in VarjoUnityXR Plugin for ET under Runtime > EyeTracking
+        if (EyeTrackingExample.RequestGazeCalibration()) // Using Varjo Plugin’s EyeTrackingExample
         {
             Debug.Log("Eye tracking calibrated.");
         }
@@ -32,19 +31,41 @@ public class EyeTrackingManager : MonoBehaviour
     {
         if (logging)
         {
-            EyeTrackingExample.GazeData gazeData = EyeTrackingExample.GetGaze();
-            if (gazeData.status != EyeTrackingExample.GazeStatus.Invalid)
+            List<EyeTrackingExample.GazeData> gazeDataList = new List<EyeTrackingExample.GazeData>();
+            List<EyeTrackingExample.EyeMeasurements> eyeMeasurementsList = new List<EyeTrackingExample.EyeMeasurements>();
+            int dataCount = EyeTrackingExample.GetGazeList(out gazeDataList, out eyeMeasurementsList);
+
+            if (dataCount > 0)
             {
-                string gazeEntry = $"{Time.time},{gazeData.gaze.origin},{gazeData.gaze.forward},{gazeData.focusDistance},{gazeData.focusStability}";
-                gazeDataLog.Add(gazeEntry);
+                foreach (var gazeData in gazeDataList)
+                {
+                    var eyeMeasurements = eyeMeasurementsList.Find(m => m.frameNumber == gazeData.frameNumber);
+                    if (gazeData.status != EyeTrackingExample.GazeStatus.Invalid)
+                    {
+                        string gazeEntry = $"{gazeData.captureTime},{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()},{Time.time},{gazeData.focusDistance},{gazeData.frameNumber},{gazeData.focusStability},{gazeData.status}," +
+                                           $"{gazeData.gaze.forward.x},{gazeData.gaze.forward.y},{gazeData.gaze.forward.z}," +
+                                           $"{gazeData.gaze.origin.x},{gazeData.gaze.origin.y},{gazeData.gaze.origin.z}," +
+                                           $"{gazeData.left.forward.x},{gazeData.left.forward.y},{gazeData.left.forward.z}," +
+                                           $"{gazeData.left.origin.x},{gazeData.left.origin.y},{gazeData.left.origin.z}," +
+                                           $"{gazeData.leftStatus}," +
+                                           $"{eyeMeasurements.leftPupilDiameterInMM},{eyeMeasurements.leftIrisDiameterInMM},{eyeMeasurements.leftPupilIrisDiameterRatio},{eyeMeasurements.leftEyeOpenness}," +
+                                           $"{gazeData.right.forward.x},{gazeData.right.forward.y},{gazeData.right.forward.z}," +
+                                           $"{gazeData.right.origin.x},{gazeData.right.origin.y},{gazeData.right.origin.z}," +
+                                           $"{gazeData.rightStatus}," +
+                                           $"{eyeMeasurements.rightPupilDiameterInMM},{eyeMeasurements.rightIrisDiameterInMM},{eyeMeasurements.rightPupilIrisDiameterRatio},{eyeMeasurements.rightEyeOpenness}," +
+                                           $"{eyeMeasurements.interPupillaryDistanceInMM}";
+
+                        writer.WriteLine(gazeEntry);
+                        writer.Flush(); // Ensure data is written immediately
+                    }
+                }
             }
         }
     }
 
     void StartLogging()
     {
-        
-        string logPath = @"D:\LegoVR\unity-lego-vr\ET_Data";  // where ET data is saved
+        string logPath = @"D:\LegoVR\unity-lego-vr\ET_Data";  // <-- Updated path
         Directory.CreateDirectory(logPath);
 
         DateTime now = DateTime.Now;
@@ -52,7 +73,16 @@ public class EyeTrackingManager : MonoBehaviour
         filePath = Path.Combine(logPath, fileName);
 
         writer = new StreamWriter(filePath);
-        writer.WriteLine("Time,GazeOrigin,GazeForward,FocusDistance,FocusStability");
+        writer.WriteLine("raw_timestamp,relative_to_unix_epoch_timestamp,relative_to_video_first_frame_timestamp,focus_distance,frame_number,stability,status," +
+                         "gaze_forward_x,gaze_forward_y,gaze_forward_z," +
+                         "gaze_origin_x,gaze_origin_y,gaze_origin_z," +
+                         "left_forward_x,left_forward_y,left_forward_z," +
+                         "left_origin_x,left_origin_y,left_origin_z,left_status," +
+                         "left_pupil_diameter,left_iris_diameter,left_pupil_iris_ratio,left_eye_openness," +
+                         "right_forward_x,right_forward_y,right_forward_z," +
+                         "right_origin_x,right_origin_y,right_origin_z,right_status," +
+                         "right_pupil_diameter,right_iris_diameter,right_pupil_iris_ratio,right_eye_openness," +
+                         "inter_pupillary_distance");
 
         logging = true;
         Debug.Log($"Logging started: {filePath}");
@@ -64,11 +94,6 @@ public class EyeTrackingManager : MonoBehaviour
 
         if (writer != null)
         {
-            foreach (var entry in gazeDataLog)
-            {
-                writer.WriteLine(entry);
-            }
-
             writer.Flush();
             writer.Close();
             writer = null;
@@ -83,3 +108,4 @@ public class EyeTrackingManager : MonoBehaviour
         StopLogging();
     }
 }
+
