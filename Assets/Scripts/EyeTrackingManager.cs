@@ -15,7 +15,7 @@ public class EyeTrackingManager : MonoBehaviour
         Debug.Log("Initializing Eye Tracking...");
 
         // Request gaze calibration at startup
-        if (EyeTrackingExample.RequestGazeCalibration()) // Using Varjo Plugin’s EyeTrackingExample
+        if (VarjoEyeTracking.RequestGazeCalibration()) // Using Varjo Plugin’s EyeTrackingExample
         {
             Debug.Log("Eye tracking calibrated.");
         }
@@ -31,16 +31,16 @@ public class EyeTrackingManager : MonoBehaviour
     {
         if (logging)
         {
-            List<EyeTrackingExample.GazeData> gazeDataList = new List<EyeTrackingExample.GazeData>();
-            List<EyeTrackingExample.EyeMeasurements> eyeMeasurementsList = new List<EyeTrackingExample.EyeMeasurements>();
-            int dataCount = EyeTrackingExample.GetGazeList(out gazeDataList, out eyeMeasurementsList);
+            List<VarjoEyeTracking.GazeData> gazeDataList = new List<VarjoEyeTracking.GazeData>();
+            List<VarjoEyeTracking.EyeMeasurements> eyeMeasurementsList = new List<VarjoEyeTracking.EyeMeasurements>();
+            int dataCount = VarjoEyeTracking.GetGazeList(out gazeDataList, out eyeMeasurementsList);
 
             if (dataCount > 0)
             {
                 foreach (var gazeData in gazeDataList)
                 {
                     var eyeMeasurements = eyeMeasurementsList.Find(m => m.frameNumber == gazeData.frameNumber);
-                    if (gazeData.status != EyeTrackingExample.GazeStatus.Invalid)
+                    if (gazeData.status != VarjoEyeTracking.GazeStatus.Invalid)
                     {
                         string gazeEntry = $"{gazeData.captureTime},{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()},{Time.time},{gazeData.focusDistance},{gazeData.frameNumber},{gazeData.focusStability},{gazeData.status}," +
                                            $"{gazeData.gaze.forward.x},{gazeData.gaze.forward.y},{gazeData.gaze.forward.z}," +
@@ -65,7 +65,7 @@ public class EyeTrackingManager : MonoBehaviour
 
     void StartLogging()
     {
-        string logPath = @"D:\LegoVR\unity-lego-vr\ET_Data";  // <-- Updated path
+        string logPath = @"D:\LegoVR\unity-lego-vr\Other_than_in_project_files\ET_Data";  // <-- Updated path
         Directory.CreateDirectory(logPath);
 
         DateTime now = DateTime.Now;
