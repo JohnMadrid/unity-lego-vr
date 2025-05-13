@@ -1,0 +1,2 @@
+raw_timestamp,relative_to_unix_epoch_timestamp,device_name,position_x,position_y,position_z,rotation_x,rotation_y,rotation_z,rotation_w
+1747129585026,0,SteamVR Tracker (Waist),-0.06778243,0.7481575,1.708819,-0.6072808,0.2853234,0.4397146,0.5970358
