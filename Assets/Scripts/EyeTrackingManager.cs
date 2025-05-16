@@ -9,6 +9,7 @@ public class EyeTrackingManager : MonoBehaviour
     private StreamWriter writer;
     private bool logging = false;
     private string filePath;
+    [SerializeField] public bool trackingEnabled; //Variable with field in inspector to enable tracking; default = false
 
     void Start()
     {
@@ -23,8 +24,12 @@ public class EyeTrackingManager : MonoBehaviour
         {
             Debug.LogError("Calibration failed.");
         }
-
-        StartLogging();
+        
+        // Check if tracking enabled (can be changed in inspector) and then start logging
+        if (trackingEnabled)
+        {
+            StartLogging(); 
+        }
     }
 
     void Update()

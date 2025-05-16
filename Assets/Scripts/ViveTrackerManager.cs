@@ -9,13 +9,17 @@ public class ViveTrackerManager : MonoBehaviour
     private StreamWriter writer;
     private bool logging = false;
     private string filePath;
+    [SerializeField] public bool trackingEnabled; //Variable with field in inspector to enable tracking; default = false
 
     void Start()
     {
         Debug.Log("Initializing Body Tracking...");
 
-        // Start logging body tracking data
-        StartLogging();
+        // Check if tracking enabled (can be changed in inspector) and then start logging
+        if (trackingEnabled)
+        {
+            StartLogging(); 
+        }
     }
 
     void Update()

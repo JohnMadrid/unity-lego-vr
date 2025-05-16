@@ -12,11 +12,17 @@ public class IndexControllerLogger : MonoBehaviour
     private StreamWriter writer;
     private string filePath;
     private bool logging = false;
-
+    [SerializeField] public bool trackingEnabled; //Variable with field in inspector to enable tracking; default = false
+    
     void Start()
     {
         TryInitializeControllers();
-        StartLogging();
+        
+        // Check if tracking enabled (can be changed in inspector) and then start logging
+        if (trackingEnabled)
+        {
+            StartLogging(); 
+        }
     }
 
     void Update()
