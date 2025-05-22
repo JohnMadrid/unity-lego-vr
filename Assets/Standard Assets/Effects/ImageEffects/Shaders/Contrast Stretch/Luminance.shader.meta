@@ -1,0 +1,11 @@
+fileFormatVersion: 2
+guid: befbb4b9c320b4b18a08ef7afb93b6c9
+ShaderImporter:
+  userData: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 64397
+  packageName: Brick Town
+  packageVersion: 1.01
+  assetPath: Assets/Standard Assets/Effects/ImageEffects/Shaders/Contrast Stretch/Luminance.shader
+  uploadId: 169324

@@ -1,0 +1,11 @@
+fileFormatVersion: 2
+guid: d8e82664aa8686642a424c88ab10164a
+ShaderImporter:
+  userData: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 64397
+  packageName: Brick Town
+  packageVersion: 1.01
+  assetPath: Assets/Standard Assets/Effects/ImageEffects/Shaders/_DepthOfField/DepthOfFieldDX11.shader
+  uploadId: 169324

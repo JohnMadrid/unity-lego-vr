@@ -1,0 +1,16 @@
+fileFormatVersion: 2
+guid: b5f1618d14cd80f4da910f00b04af37f
+MonoImporter:
+  serializedVersion: 2
+  defaultReferences: []
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 64397
+  packageName: Brick Town
+  packageVersion: 1.01
+  assetPath: Assets/Standard Assets/Editor/ImageEffects/EdgeDetectionEditor.cs
+  uploadId: 169324

@@ -1,0 +1,16 @@
+fileFormatVersion: 2
+guid: 459cec5b068041e44a60a6e3b6abb0eb
+MonoImporter:
+  serializedVersion: 2
+  defaultReferences: []
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 64397
+  packageName: Brick Town
+  packageVersion: 1.01
+  assetPath: Assets/Standard Assets/Vehicles/Car/Scripts/Mudguard.cs
+  uploadId: 169324

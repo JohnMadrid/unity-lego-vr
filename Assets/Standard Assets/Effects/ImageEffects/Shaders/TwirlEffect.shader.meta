@@ -1,0 +1,11 @@
+fileFormatVersion: 2
+guid: 641b781cad112c75d0008dfa8d76c639
+ShaderImporter:
+  userData: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 64397
+  packageName: Brick Town
+  packageVersion: 1.01
+  assetPath: Assets/Standard Assets/Effects/ImageEffects/Shaders/TwirlEffect.shader
+  uploadId: 169324

@@ -1,0 +1,11 @@
+fileFormatVersion: 2
+guid: 95616c020c5604dda96cf76afbbc0272
+ShaderImporter:
+  userData: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 64397
+  packageName: Brick Town
+  packageVersion: 1.01
+  assetPath: Assets/Standard Assets/Effects/ImageEffects/Shaders/ScreenSpaceAmbientObscurance.shader
+  uploadId: 169324

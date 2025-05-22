@@ -1,0 +1,11 @@
+fileFormatVersion: 2
+guid: b61f0d8d8244b4b28aa66b0c8cb46a8d
+ShaderImporter:
+  userData: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 64397
+  packageName: Brick Town
+  packageVersion: 1.01
+  assetPath: Assets/Standard Assets/Effects/ImageEffects/Shaders/ColorCorrection3DLut.shader
+  uploadId: 169324

@@ -1,0 +1,16 @@
+fileFormatVersion: 2
+guid: 9ce3a3a1349a5774b94761844e652a65
+MonoImporter:
+  serializedVersion: 2
+  defaultReferences: []
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 64397
+  packageName: Brick Town
+  packageVersion: 1.01
+  assetPath: Assets/Standard Assets/Vehicles/Car/Scripts/SkidTrail.cs
+  uploadId: 169324

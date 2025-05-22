@@ -1,0 +1,11 @@
+fileFormatVersion: 2
+guid: 53b3960ee3d3d4a5caa8d5473d120187
+ShaderImporter:
+  userData: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 64397
+  packageName: Brick Town
+  packageVersion: 1.01
+  assetPath: Assets/Standard Assets/Effects/ImageEffects/Shaders/_BloomAndFlares/Blend.shader
+  uploadId: 169324

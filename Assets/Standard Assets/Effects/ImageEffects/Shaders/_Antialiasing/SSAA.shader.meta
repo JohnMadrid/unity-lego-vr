@@ -1,0 +1,11 @@
+fileFormatVersion: 2
+guid: b3728d1488b02490cbd196c7941bf1f8
+ShaderImporter:
+  userData: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 64397
+  packageName: Brick Town
+  packageVersion: 1.01
+  assetPath: Assets/Standard Assets/Effects/ImageEffects/Shaders/_Antialiasing/SSAA.shader
+  uploadId: 169324

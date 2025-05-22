@@ -1,0 +1,11 @@
+fileFormatVersion: 2
+guid: 85a88efa8c871af4a9d17c64791b6f4f
+ShaderImporter:
+  userData: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 64397
+  packageName: Brick Town
+  packageVersion: 1.01
+  assetPath: Assets/Standard Assets/Effects/ImageEffects/Shaders/CameraMotionBlur.shader
+  uploadId: 169324
