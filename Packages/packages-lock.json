@@ -12,6 +12,19 @@
       },
       "hash": "25a5fd212420688952ead9deba735357656278ec"
     },
+    "com.ultraleap.tracking": {
+      "version": "7.2.0",
+      "depth": 0,
+      "source": "registry",
+      "dependencies": {},
+      "url": "https://package.openupm.com"
+    },
+    "com.unity.2d.sprite": {
+      "version": "1.0.0",
+      "depth": 0,
+      "source": "builtin",
+      "dependencies": {}
+    },
     "com.unity.bindings.openimageio": {
       "version": "1.0.0",
       "depth": 1,
