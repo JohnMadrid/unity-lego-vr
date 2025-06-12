@@ -8,15 +8,15 @@ public class BrickSnapController : MonoBehaviour
     public List<SnapPoint> snapStuds;   // Top studs
     public List<SnapPoint> snapRecepts; // Bottom recepts
 
-    private Rigidbody rb;
-    private bool isGrabbed = false;
+    private Rigidbody _rb;
+    private bool _isGrabbed = false;
 
     public float snapDistanceThreshold = 0.2f;
-    private List<Collider> snapPointColliders = new List<Collider>();
+    private List<Collider> _snapPointColliders = new List<Collider>();
 
     void Awake()
     {
-        rb = GetComponent<Rigidbody>();
+        _rb = GetComponent<Rigidbody>();
         // Find snap points based on naming conventions
         snapStuds = new List<SnapPoint>();
         for (int i = 1; i <= 4; i++)
@@ -44,25 +44,25 @@ public class BrickSnapController : MonoBehaviour
         {
             var collider = sp.GetComponent<Collider>();
             if (collider != null)
-                snapPointColliders.Add(collider);
+                _snapPointColliders.Add(collider);
         }
     }
 
     // Called by XR interaction events
     public void OnSelectEntered(SelectEnterEventArgs args)
     {
-        isGrabbed = true;
+        _isGrabbed = true;
     }
 
     public void OnSelectExited(SelectExitEventArgs args)
     {
-        isGrabbed = false;
+        _isGrabbed = false;
         TrySnap();
     }
 
     void Update()
     {
-        if (isGrabbed)
+        if (_isGrabbed)
         {
             UpdateActiveSnapPoints();
         }
@@ -71,7 +71,7 @@ public class BrickSnapController : MonoBehaviour
     void UpdateActiveSnapPoints()
     {
         // Disable all snap colliders first
-        foreach (var col in snapPointColliders)
+        foreach (var col in _snapPointColliders)
             col.enabled = false;
 
         // Find closest snap point within threshold
