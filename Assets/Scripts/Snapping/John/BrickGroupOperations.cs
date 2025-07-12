@@ -63,7 +63,7 @@ public class BrickGroupOperations
         {
             // Find all bricks in the connected group
             List<BrickBehavior> allGroupBricks = new List<BrickBehavior>();
-            FindAllConnected(brick, allGroupBricks);
+            BrickGroupUtils.FindAllConnected(brick, allGroupBricks);
             Debug.Log($"[{brick.name}] CheckForUnsnapConditions() - Found {allGroupBricks.Count} total bricks in group");
             
             // Find all grabbed bricks in the group
@@ -131,84 +131,68 @@ public class BrickGroupOperations
     // Method to check if separate groups should be joined
     private void CheckForGroupJoining(IXRSelectInteractor interactor)
     {
-        Debug.Log($"[{brick.name}] CheckForGroupJoining() - Checking for potential group joining");
+        Debug.Log($"[{brick.name}] CheckForGroupJoining() - Checking for group joining opportunities");
         
-        // Find all grabbed bricks in the scene
-        List<BrickBehavior> allGrabbedBricks = new List<BrickBehavior>();
-        List<IXRSelectInteractor> allInteractors = new List<IXRSelectInteractor>();
+        // Find all bricks in the current group
+        List<BrickBehavior> allGroupBricks = new List<BrickBehavior>();
+        BrickGroupUtils.FindAllConnected(brick, allGroupBricks);
+        Debug.Log($"[{brick.name}] CheckForGroupJoining() - Found {allGroupBricks.Count} bricks in current group");
         
-        // Get all BrickBehavior components in the scene
-        BrickBehavior[] allBricks = UnityEngine.Object.FindObjectsOfType<BrickBehavior>();
-        
-        foreach (var otherBrick in allBricks)
+        // Find all other grabbed bricks in the scene
+        List<BrickBehavior> otherGrabbedBricks = new List<BrickBehavior>();
+        foreach (var groupBrick in allGroupBricks)
         {
-            if (otherBrick.GetComponent<UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable>().isSelected)
+            if (groupBrick != brick && groupBrick.GetComponent<UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable>().isSelected)
             {
-                allGrabbedBricks.Add(otherBrick);
-                allInteractors.Add(otherBrick.GetComponent<UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable>().firstInteractorSelecting);
-                Debug.Log($"[{brick.name}] CheckForGroupJoining() - Found grabbed brick: {otherBrick.name} by interactor: {otherBrick.GetComponent<UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable>().firstInteractorSelecting?.transform.name}");
+                otherGrabbedBricks.Add(groupBrick);
             }
         }
         
-        Debug.Log($"[{brick.name}] CheckForGroupJoining() - Found {allGrabbedBricks.Count} total grabbed bricks");
+        Debug.Log($"[{brick.name}] CheckForGroupJoining() - Found {otherGrabbedBricks.Count} other grabbed bricks in group");
         
-        float strictJoinThreshold = brick.groupJoinStrictThreshold; // Use BrickBehavior's groupJoinStrictThreshold
-        
-        // Check if we have multiple grabbed bricks with different interactors
-        if (allGrabbedBricks.Count > 1)
+        // Check each other grabbed brick for potential joining
+        foreach (var otherGrabbedBrick in otherGrabbedBricks)
         {
-            bool differentInteractors = false;
-            for (int i = 0; i < allInteractors.Count; i++)
-            {
-                for (int j = i + 1; j < allInteractors.Count; j++)
-                {
-                    if (allInteractors[i] != allInteractors[j])
-                    {
-                        differentInteractors = true;
-                        Debug.Log($"[{brick.name}] CheckForGroupJoining() - Different interactors detected: {allInteractors[i]?.transform.name} vs {allInteractors[j]?.transform.name}");
-                        break;
-                    }
-                }
-                if (differentInteractors) break;
-            }
+            CheckForGroupJoiningWithBrick(otherGrabbedBrick, interactor);
+        }
+    }
+    
+    // Helper method to check for group joining with a specific brick
+    private void CheckForGroupJoiningWithBrick(BrickBehavior otherBrick, IXRSelectInteractor interactor)
+    {
+        Debug.Log($"[{brick.name}] CheckForGroupJoiningWithBrick() - Checking for group joining with {otherBrick.name}");
+        
+        // Check if the other brick is in a different group
+        if (!BrickGroupUtils.AreBricksInSameGroup(brick, otherBrick))
+        {
+            Debug.Log($"[{brick.name}] CheckForGroupJoiningWithBrick() - {otherBrick.name} is in a different group, checking distance");
             
-            if (differentInteractors)
+            // Check distance between the groups
+            float distance = Vector3.Distance(brick.transform.position, otherBrick.transform.position);
+            float joinThreshold = brick.groupJoinThreshold;
+            
+            if (distance < joinThreshold)
             {
-                Debug.Log($"[{brick.name}] CheckForGroupJoining() - MULTI-CONTROLLER JOINING POSSIBLE! Checking for close proximity");
+                Debug.Log($"[{brick.name}] CheckForGroupJoiningWithBrick() - Groups are close enough for potential joining (distance: {distance} < {joinThreshold})");
                 
-                // Check if any of the grabbed bricks are close enough to potentially join
-                for (int i = 0; i < allGrabbedBricks.Count; i++)
-                {
-                    for (int j = i + 1; j < allGrabbedBricks.Count; j++)
-                    {
-                        var brick1 = allGrabbedBricks[i];
-                        var brick2 = allGrabbedBricks[j];
-                        
-                        // Check if these bricks are in different groups
-                        if (!AreInSameGroup(brick1, brick2))
-                        {
-                            float distance = Vector3.Distance(brick1.transform.position, brick2.transform.position);
-                            Debug.Log($"[{brick.name}] CheckForGroupJoining() - Distance between {brick1.name} and {brick2.name}: {distance}");
-                            
-                            // Use a smaller threshold for more precise joining
-                            if (distance < strictJoinThreshold) // Adjustable strict group join threshold
-                            {
-                                Debug.Log($"[{brick.name}] CheckForGroupJoining() - Bricks {brick1.name} and {brick2.name} are close enough for potential joining");
-                                
-                                // Clear snap immunity to allow joining
-                                brick1.snapImmunityEndTime = 0f;
-                                brick2.snapImmunityEndTime = 0f;
-                                
-                                // Enable collision detection for both bricks to allow stud collisions
-                                brick1.EnableStudCollisions();
-                                brick2.EnableStudCollisions();
-                                
-                                Debug.Log($"[{brick.name}] CheckForGroupJoining() - Cleared snap immunity and enabled collisions for potential joining");
-                            }
-                        }
-                    }
-                }
+                // Clear snap immunity to allow joining
+                brick.snapImmunityEndTime = 0f;
+                otherBrick.snapImmunityEndTime = 0f;
+                
+                // Enable collision detection for both bricks
+                brick.EnableStudCollisions();
+                otherBrick.EnableStudCollisions();
+                
+                Debug.Log($"[{brick.name}] CheckForGroupJoiningWithBrick() - Cleared snap immunity and enabled collisions for potential joining");
             }
+            else
+            {
+                Debug.Log($"[{brick.name}] CheckForGroupJoiningWithBrick() - Groups too far apart for joining (distance: {distance} >= {joinThreshold})");
+            }
+        }
+        else
+        {
+            Debug.Log($"[{brick.name}] CheckForGroupJoiningWithBrick() - {otherBrick.name} is already in the same group");
         }
     }
     
@@ -218,8 +202,8 @@ public class BrickGroupOperations
         List<BrickBehavior> group1 = new List<BrickBehavior>();
         List<BrickBehavior> group2 = new List<BrickBehavior>();
         
-        FindAllConnected(brick1, group1);
-        FindAllConnected(brick2, group2);
+        BrickGroupUtils.FindAllConnected(brick1, group1);
+        BrickGroupUtils.FindAllConnected(brick2, group2);
         
         // Check if there's any overlap between the groups
         foreach (var groupBrick in group1)
@@ -235,75 +219,43 @@ public class BrickGroupOperations
 
     public void CheckForGroupJoiningDuringCollision(Stud ourStud, Stud targetStud)
     {
-        BrickBehavior targetBrick = targetStud.ParentBrick;
-        if (targetBrick == null) return;
+        Debug.Log($"[{brick.name}] CheckForGroupJoiningDuringCollision() - Checking for group joining during collision");
         
-        // Check if both bricks are currently grabbed by different controllers
-        bool thisGrabbed = brick.GetComponent<UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable>().isSelected;
-        bool targetGrabbed = targetBrick.GetComponent<UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable>().isSelected;
-        
-        if (thisGrabbed && targetGrabbed)
+        // Check if these studs belong to different groups
+        if (ourStud.ParentBrick != null && targetStud.ParentBrick != null)
         {
-            var thisInteractor = brick.GetComponent<UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable>().firstInteractorSelecting;
-            var targetInteractor = targetBrick.GetComponent<UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable>().firstInteractorSelecting;
-            
-            if (thisInteractor != targetInteractor)
+            if (!BrickGroupUtils.AreBricksInSameGroup(ourStud.ParentBrick, targetStud.ParentBrick))
             {
-                Debug.Log($"[{brick.name}] CheckForGroupJoiningDuringCollision() - DIFFERENT CONTROLLERS DETECTED!");
-                Debug.Log($"[{brick.name}] CheckForGroupJoiningDuringCollision() - This brick grabbed by: {thisInteractor?.transform.name}");
-                Debug.Log($"[{brick.name}] CheckForGroupJoiningDuringCollision() - Target brick grabbed by: {targetInteractor?.transform.name}");
+                Debug.Log($"[{brick.name}] CheckForGroupJoiningDuringCollision() - Studs belong to different groups, checking for joining");
                 
-                // Check if these bricks are in different groups
-                if (!AreInSameGroup(brick, targetBrick))
+                // Check if the bricks are close enough for potential joining
+                float distance = Vector3.Distance(ourStud.ParentBrick.transform.position, targetStud.ParentBrick.transform.position);
+                float joinThreshold = brick.groupJoinThreshold;
+                
+                if (distance < joinThreshold)
                 {
-                    Debug.Log($"[{brick.name}] CheckForGroupJoiningDuringCollision() - DIFFERENT GROUPS DETECTED! Enabling joining...");
+                    Debug.Log($"[{brick.name}] CheckForGroupJoiningDuringCollision() - Bricks are close enough for potential joining (distance: {distance} < {joinThreshold})");
                     
-                    // Clear snap immunity for both bricks
-                    brick.snapImmunityEndTime = 0f;
-                    targetBrick.snapImmunityEndTime = 0f;
+                    // Clear snap immunity to allow joining
+                    ourStud.ParentBrick.snapImmunityEndTime = 0f;
+                    targetStud.ParentBrick.snapImmunityEndTime = 0f;
                     
                     // Enable collision detection for both bricks
-                    brick.EnableStudCollisions();
-                    targetBrick.EnableStudCollisions();
+                    ourStud.ParentBrick.EnableStudCollisions();
+                    targetStud.ParentBrick.EnableStudCollisions();
                     
-                    Debug.Log($"[{brick.name}] CheckForGroupJoiningDuringCollision() - Group joining enabled for {brick.name} and {targetBrick.name}");
+                    Debug.Log($"[{brick.name}] CheckForGroupJoiningDuringCollision() - Cleared snap immunity and enabled collisions for potential joining");
                 }
                 else
                 {
-                    Debug.Log($"[{brick.name}] CheckForGroupJoiningDuringCollision() - Same group detected, no joining needed");
+                    Debug.Log($"[{brick.name}] CheckForGroupJoiningDuringCollision() - Bricks too far apart for joining (distance: {distance} >= {joinThreshold})");
                 }
             }
             else
             {
-                Debug.Log($"[{brick.name}] CheckForGroupJoiningDuringCollision() - Same controller detected, no joining needed");
+                Debug.Log($"[{brick.name}] CheckForGroupJoiningDuringCollision() - Studs belong to same group, no joining needed");
             }
         }
-        else
-        {
-            Debug.Log($"[{brick.name}] CheckForGroupJoiningDuringCollision() - Not all bricks grabbed, no joining check needed");
-        }
-    }
-
-    private void FindAllConnected(BrickBehavior brick, List<BrickBehavior> visited)
-    {
-        Debug.Log($"[{this.brick.name}] FindAllConnected() - Visiting brick: {brick.name}");
-
-        if (brick == null || visited.Contains(brick))
-        {
-            Debug.Log($"[{this.brick.name}] FindAllConnected() - Brick is null or already visited, returning");
-            return;
-        }
-
-        visited.Add(brick);
-        Debug.Log($"[{this.brick.name}] FindAllConnected() - Added {brick.name} to visited list. Total visited: {visited.Count}");
-        
-        foreach (var neighbor in brick.ConnectedNeighbors)
-        {
-            Debug.Log($"[{this.brick.name}] FindAllConnected() - Recursively checking neighbor of {brick.name}: {neighbor.name}");
-            FindAllConnected(neighbor, visited);
-        }
-        
-        Debug.Log($"[{this.brick.name}] FindAllConnected() - Finished visiting all neighbors of {brick.name}");
     }
 
     private void SplitConnectedGroup(List<BrickBehavior> grabbedBricks)
@@ -312,7 +264,7 @@ public class BrickGroupOperations
         
         // Find all bricks in the original group
         List<BrickBehavior> allGroupBricks = new List<BrickBehavior>();
-        FindAllConnected(brick, allGroupBricks);
+        BrickGroupUtils.FindAllConnectedInGroup(brick, allGroupBricks, brick.name);
         Debug.Log($"[{brick.name}] SplitConnectedGroup() - Original group has {allGroupBricks.Count} total bricks");
         
         // Create separate groups for each grabbed brick
@@ -354,6 +306,13 @@ public class BrickGroupOperations
                 
                 // Activate snap immunity for all bricks in the split groups
                 groupBrick.ActivateSnapImmunity();
+                
+                // Restore original mass to prevent weight accumulation after separation
+                if (groupBrick.GetComponent<Rigidbody>() != null)
+                {
+                    groupBrick.GetComponent<Rigidbody>().mass = 1.0f;
+                    Debug.Log($"[{brick.name}] SplitConnectedGroup() - Restored mass for {groupBrick.name}: mass=1.0f");
+                }
             }
             
             // Explicitly restore physics for the master brick ONLY if it's not currently grabbed

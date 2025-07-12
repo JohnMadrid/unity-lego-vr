@@ -304,33 +304,6 @@ public class Stud : MonoBehaviour
        return activeConnections.Any(c => c.connectedStud == otherStud);
    }
 
-   // Debug method to test collision detection
-   [ContextMenu("Test Collision Detection")]
-   public void TestCollisionDetection()
-   {
-       Debug.Log($"[{name}] TestCollisionDetection() - Testing collision detection");
-       Debug.Log($"[{name}] TestCollisionDetection() - ParentBrick: {ParentBrick?.name ?? "null"}");
-       Debug.Log($"[{name}] TestCollisionDetection() - IsReadyForSnap: {ParentBrick?.IsReadyForSnap() ?? false}");
-       Debug.Log($"[{name}] TestCollisionDetection() - CurrentState: {currentState}");
-       Debug.Log($"[{name}] TestCollisionDetection() - IsAvailable: {IsAvailable}");
-       
-       Collider col = GetComponent<Collider>();
-       Debug.Log($"[{name}] TestCollisionDetection() - Collider: {col.name}, isTrigger={col.isTrigger}, enabled={col.enabled}");
-       
-       // Find nearby studs
-       Stud[] allStuds = FindObjectsOfType<Stud>();
-       Debug.Log($"[{name}] TestCollisionDetection() - Found {allStuds.Length} total studs in scene");
-       
-       foreach (var stud in allStuds)
-       {
-           if (stud != this)
-           {
-               float distance = Vector3.Distance(transform.position, stud.transform.position);
-               Debug.Log($"[{name}] TestCollisionDetection() - Distance to {stud.name}: {distance:F6}");
-           }
-       }
-   }
-
    void OnDrawGizmos()
    {
        if (!showDebugConnections) return;
@@ -355,43 +328,10 @@ public class Stud : MonoBehaviour
    {
        if (brick1 == null || brick2 == null) return false;
        
-       // Use the same logic as in BrickBehavior to check if bricks are in the same group
-       List<BrickBehavior> group1 = new List<BrickBehavior>();
-       List<BrickBehavior> group2 = new List<BrickBehavior>();
-       
-       // Find all connected bricks for both groups
-       FindAllConnectedInGroup(brick1, group1);
-       FindAllConnectedInGroup(brick2, group2);
-       
-       // Check if there's any overlap between the groups
-       foreach (var brick in group1)
-       {
-           if (group2.Contains(brick))
-           {
-               return true; // They're in the same group
-           }
-       }
-       
-       return false; // They're in different groups
+       // Use the utility class to check if bricks are in the same group
+       return BrickGroupUtils.AreBricksInSameGroup(brick1, brick2);
    }
    
-   // Helper method to find all connected bricks in a group (simplified version)
-   private void FindAllConnectedInGroup(BrickBehavior brick, List<BrickBehavior> visited)
-   {
-       if (brick == null || visited.Contains(brick))
-       {
-           return;
-       }
-       
-       visited.Add(brick);
-       
-       // Check all connected neighbors
-       foreach (var neighbor in brick.ConnectedNeighbors)
-       {
-           FindAllConnectedInGroup(neighbor, visited);
-       }
-   }
-
    public void ClearSnapRangeState()
    {
        if (CurrentState == StudState.InSnapRange)

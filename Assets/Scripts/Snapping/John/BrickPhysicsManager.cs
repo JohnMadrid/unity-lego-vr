@@ -25,53 +25,21 @@ public class BrickPhysicsManager
 
     public void OnGrabReleased()
     {
-        Debug.Log($"[{brick.name}] OnGrabReleased() - Handling physics in physics manager");
+        Debug.Log($"[{brick.name}] OnGrabReleased() - Handling grab release");
         
-        var rb = brick.GetComponent<Rigidbody>();
-        if (rb != null)
-        {
-            Debug.Log($"[{brick.name}] OnGrabReleased() - DEBUG: Physics at start - isKinematic: {rb.isKinematic}, useGravity: {rb.useGravity}, velocity: {rb.linearVelocity}");
-        }
+        // Find all bricks in the connected group
+        List<BrickBehavior> groupBricks = new List<BrickBehavior>();
+        BrickGroupUtils.FindAllConnectedInGroup(brick, groupBricks, brick.name);
+        Debug.Log($"[{brick.name}] OnGrabReleased() - Found {groupBricks.Count} bricks in group");
         
-        // Handle physics restoration based on connection state
-        if (brick.ConnectedNeighbors.Count > 0)
-        {
-            Debug.Log($"[{brick.name}] OnGrabReleased() - Brick is connected to {brick.ConnectedNeighbors.Count} neighbors");
-            
-            // Find all connected bricks in the group
-            List<BrickBehavior> groupBricks = new List<BrickBehavior>();
-            FindAllConnected(brick, groupBricks);
-            Debug.Log($"[{brick.name}] OnGrabReleased() - Found {groupBricks.Count} total bricks in group");
-            
-            // IMPORTANT: When releasing a grabbed brick, maintain the group connection
-            // Only change the master if this brick was not originally the master
-            // Use the tracked original master
-            BrickBehavior originalMaster = brick.OriginalMaster;
-            
-            Debug.Log($"[{brick.name}] OnGrabReleased() - Restoring original master: {originalMaster.name}");
-            
-            // Update the master for the entire group to restore original structure
-            UpdateMaster(originalMaster);
-            Debug.Log($"[{brick.name}] OnGrabReleased() - Updated master for entire group");
-            
-            // Stabilize the group after release to prevent weird dynamic behavior
-            brick.StartCoroutine(StabilizeGroupAfterRelease(groupBricks));
-        }
-        else
-        {
-            Debug.Log($"[{brick.name}] OnGrabReleased() - Brick is not connected to any neighbors");
-            // Restore normal physics for standalone brick
-            var standaloneRb = brick.GetComponent<Rigidbody>();
-            Debug.Log($"[{brick.name}] OnGrabReleased() - DEBUG: Physics before standalone setup - isKinematic: {standaloneRb.isKinematic}, useGravity: {standaloneRb.useGravity}");
-            
-            standaloneRb.isKinematic = false;
-            standaloneRb.useGravity = true;
-            Debug.Log($"[{brick.name}] OnGrabReleased() - Set physics for standalone brick: isKinematic=false, useGravity=true");
-            Debug.Log($"[{brick.name}] OnGrabReleased() - DEBUG: Physics after standalone setup - isKinematic: {standaloneRb.isKinematic}, useGravity: {standaloneRb.useGravity}");
-        }
+        // Determine the new master brick (the one that was originally grabbed)
+        BrickBehavior originalMaster = brick.OriginalMaster;
+        Debug.Log($"[{brick.name}] OnGrabReleased() - Original master: {originalMaster?.name ?? "null"}");
         
-        // Validate physics state after release
-        ValidatePhysicsState();
+        // Update the master for all bricks in the group
+        UpdateMaster(originalMaster);
+        
+        Debug.Log($"[{brick.name}] OnGrabReleased() - Grab release handling complete");
     }
 
     // Coroutine to stabilize the group after release
@@ -183,7 +151,7 @@ public class BrickPhysicsManager
         
         // Find all bricks in the connected group
         List<BrickBehavior> groupBricks = new List<BrickBehavior>();
-        FindAllConnected(brick, groupBricks);
+        BrickGroupUtils.FindAllConnectedInGroup(brick, groupBricks, brick.name);
         
         foreach (var groupBrick in groupBricks)
         {
@@ -204,28 +172,6 @@ public class BrickPhysicsManager
         Debug.Log($"[{brick.name}] StabilizeGroup() - Group stabilization complete");
     }
 
-    private void FindAllConnected(BrickBehavior brick, List<BrickBehavior> visited)
-    {
-        Debug.Log($"[{this.brick.name}] FindAllConnected() - Visiting brick: {brick.name}");
-
-        if (brick == null || visited.Contains(brick))
-        {
-            Debug.Log($"[{this.brick.name}] FindAllConnected() - Brick is null or already visited, returning");
-            return;
-        }
-
-        visited.Add(brick);
-        Debug.Log($"[{this.brick.name}] FindAllConnected() - Added {brick.name} to visited list. Total visited: {visited.Count}");
-        
-        foreach (var neighbor in brick.ConnectedNeighbors)
-        {
-            Debug.Log($"[{this.brick.name}] FindAllConnected() - Recursively checking neighbor of {brick.name}: {neighbor.name}");
-            FindAllConnected(neighbor, visited);
-        }
-        
-        Debug.Log($"[{this.brick.name}] FindAllConnected() - Finished visiting all neighbors of {brick.name}");
-    }
-
     private void UpdateMaster(BrickBehavior newMaster)
     {
         Debug.Log($"[{brick.name}] UpdateMaster() - Updating group master to: {newMaster.name}");
@@ -233,7 +179,7 @@ public class BrickPhysicsManager
         List<BrickBehavior> groupToUpdate = new List<BrickBehavior>();
         Debug.Log($"[{brick.name}] UpdateMaster() - Created group members list");
         
-        FindAllConnected(brick, groupToUpdate);
+        BrickGroupUtils.FindAllConnectedInGroup(brick, groupToUpdate, brick.name);
         Debug.Log($"[{brick.name}] UpdateMaster() - Found {groupToUpdate.Count} bricks in the group");
 
         foreach (var groupBrick in groupToUpdate)
@@ -301,14 +247,14 @@ public class BrickPhysicsManager
         
         // Find all bricks in the connected group
         List<BrickBehavior> groupBricks = new List<BrickBehavior>();
-        FindAllConnected(brick, groupBricks);
+        BrickGroupUtils.FindAllConnectedInGroup(brick, groupBricks, brick.name);
         
         foreach (var groupBrick in groupBricks)
         {
             // Strengthen the rigidbody properties
             if (groupBrick.GetComponent<Rigidbody>() != null)
             {
-                groupBrick.GetComponent<Rigidbody>().mass = Mathf.Max(groupBrick.GetComponent<Rigidbody>().mass, 1.0f);
+                groupBrick.GetComponent<Rigidbody>().mass = 1.0f; // Normalize mass to prevent group weight accumulation
                 // Set drag and angular drag from BrickBehavior
                 groupBrick.GetComponent<Rigidbody>().linearDamping = brick.brickDrag;
                 groupBrick.GetComponent<Rigidbody>().angularDamping = brick.brickAngularDrag;

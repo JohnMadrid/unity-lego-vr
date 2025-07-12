@@ -144,46 +144,76 @@ public class BrickSnappingSystem
         
         Debug.Log($"[{brick.name}] CalculateSnapTransform() - Stud positions: Our={ourStudWorldPos}, Target={targetStudWorldPos}");
 
-        // For rotation, we want our brick to have the same rotation as the target brick
-        // This ensures proper alignment of all studs
+        // STEP 1: Calculate final position assuming brick matches target brick rotation on all axes
+        // Get our stud's local position relative to our brick
+        Vector3 ourStudLocalPos = ourStud.transform.localPosition;
+        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Our stud local position: {ourStudLocalPos}");
+
+        // First, assume the brick will have the same rotation as the target brick (for position calculation)
         Quaternion targetBrickRotation = targetBrick.transform.rotation;
-        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Target brick rotation (euler): {targetBrickRotation.eulerAngles}");
+        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Using target brick rotation for position calculation: {targetBrickRotation.eulerAngles}");
 
-        // Calculate the offset from our brick's center to our stud (in world space)
-        Vector3 ourBrickToStudOffset = ourStudWorldPos - brick.transform.position;
-        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Our brick to stud world offset: {ourBrickToStudOffset}");
-
-        // Apply the target rotation to our offset to get the final position
-        Vector3 rotatedOffset = targetBrickRotation * ourBrickToStudOffset;
-        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Rotated offset: {rotatedOffset}");
+        // Calculate the final position using a single, precise calculation:
+        // We want our stud to end up at the target stud's world position
+        // So our brick center needs to be: target stud position - (our stud's world position after rotation)
+        Vector3 finalPosition = targetStudWorldPos - (targetBrickRotation * ourStudLocalPos);
         
-        // Calculate the final position: target stud position minus the rotated offset
-        // This will position our brick so that our stud aligns with the target stud
-        Vector3 finalPosition = targetStudWorldPos - rotatedOffset;
-        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Final position calculation: {targetStudWorldPos} - {rotatedOffset} = {finalPosition}");
+        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Initial position calculation: {targetStudWorldPos} - (rotated {ourStudLocalPos}) = {finalPosition}");
         
-        // IMPORTANT: Use the proven approach from ValidateAndCorrectAlignment
-        // Calculate the correction needed to align our stud with the target stud
-        Vector3 correction = targetStudWorldPos - ourStudWorldPos;
-        
-        // Apply the correction to the final position
-        finalPosition += correction;
-        
-        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Our stud world position: {ourStudWorldPos}");
-        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Target stud world position: {targetStudWorldPos}");
-        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Applying correction: {correction}");
-        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Final position after correction: {finalPosition}");
-        
-        // Add a small offset to prevent exact overlap that might cause physics issues
-        Vector3 snapOffset = Vector3.up * 0.001f; // 1mm offset upward
+        // Calculate offset using the direction from target brick center to target stud
+        // This gives us the natural direction the target stud faces
+        Vector3 targetBrickToStud = (targetStudWorldPos - targetBrick.transform.position).normalized;
+        Vector3 snapOffset = targetBrickToStud * 0.001f; // 1mm offset in stud direction
         finalPosition += snapOffset;
-        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Added snap offset: {snapOffset}");
-        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Final position with offset: {finalPosition}");
         
-        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Final position: {finalPosition}, Rotation: {targetBrickRotation.eulerAngles}");
+        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Target brick to stud direction: {targetBrickToStud}");
+        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Added snap offset: {snapOffset}");
+        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Position after offset: {finalPosition}");
+        
+        // STEP 2: Calculate optimal distance based on actual brick and stud geometry
+        Vector3 currentBrickCenter = finalPosition;
+        float distanceFromTargetStudToOurBrick = Vector3.Distance(currentBrickCenter, targetStudWorldPos);
+        
+        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Distance from target stud to our brick center: {distanceFromTargetStudToOurBrick:F3}");
+        
+        // Calculate the optimal distance: target stud to our brick center = our stud to our brick center + tolerance
+        float ourStudToBrickCenterDistance = Vector3.Distance(ourStud.transform.position, brick.transform.position);
+        float optimalDistance = ourStudToBrickCenterDistance + 0.001f; // 1mm tolerance
+        
+        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Our stud to brick center distance: {ourStudToBrickCenterDistance:F3}");
+        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Optimal distance: {optimalDistance:F3}");
+        
+        // If the distance from target stud to our brick center is too large, adjust the position to bring them closer
+        // while still maintaining the stud alignment
+        if (distanceFromTargetStudToOurBrick > optimalDistance)
+        {
+            // Calculate the direction from target stud to our brick center
+            Vector3 directionFromTargetStudToOurBrick = (currentBrickCenter - targetStudWorldPos).normalized;
+            
+            // Calculate how much we need to move our brick closer
+            float excessDistance = distanceFromTargetStudToOurBrick - optimalDistance;
+            
+            // Move our brick closer by the excess distance
+            Vector3 proximityAdjustment = directionFromTargetStudToOurBrick * excessDistance;
+            finalPosition -= proximityAdjustment;
+            
+            Debug.Log($"[{brick.name}] CalculateSnapTransform() - Applied proximity adjustment: {proximityAdjustment}");
+            Debug.Log($"[{brick.name}] CalculateSnapTransform() - New distance from target stud to our brick center: {Vector3.Distance(finalPosition, targetStudWorldPos):F3}");
+        }
+        else
+        {
+            Debug.Log($"[{brick.name}] CalculateSnapTransform() - Distance is already optimal, no proximity adjustment needed");
+        }
+        
+        // STEP 3: Calculate final rotation by adjusting only Z-axis (max 45°)
+        // Use the target brick rotation from step 1 as the starting point, then adjust Z-axis
+        Quaternion finalRotation = AdjustZAxisToMatchTarget(targetBrickRotation, targetBrick);
+        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Final rotation after Z-axis adjustment: {finalRotation.eulerAngles}");
+        
+        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Final position: {finalPosition}, Rotation: {finalRotation.eulerAngles}");
 
         targetSnapPosition = finalPosition;
-        targetSnapRotation = targetBrickRotation;
+        targetSnapRotation = finalRotation;
         
         Debug.Log($"[{brick.name}] CalculateSnapTransform() - Set targetSnapPosition: {targetSnapPosition}");
         Debug.Log($"[{brick.name}] CalculateSnapTransform() - Set targetSnapRotation: {targetSnapRotation.eulerAngles}");
@@ -194,29 +224,47 @@ public class BrickSnappingSystem
         Debug.Log($"[{brick.name}] CalculateSnapTransform() - Debug lines drawn: Green=stud alignment, Red=brick movement");
     }
     
-    // Method to snap rotation to the closest 90-degree alignment around the brick's own Z-axis
-    private Quaternion SnapToClosest90DegreeRotation(Quaternion currentRotation, BrickBehavior targetBrick)
+    // Method to adjust the Z-axis of the snapping brick to match the target brick's Z-axis
+    private Quaternion AdjustZAxisToMatchTarget(Quaternion baseRotation, BrickBehavior targetBrick)
     {
         // Get the target brick's rotation
         Quaternion targetRotation = targetBrick.transform.rotation;
         
         // For LEGO-like bricks, we want to:
-        // 1. Align the brick's X and Y axes with the target brick (so they're on the same plane)
-        // 2. Preserve the brick's own Z-axis rotation and snap it to 90-degree increments
+        // 1. Start with the base rotation (target brick rotation from step 1)
+        // 2. Take the target brick's rotation AS-IS (don't normalize it)
+        // 3. Only adjust the Z-axis to match the target's Z-axis
+        // 4. Since bricks are square, we never need more than 45° rotation
         
-        // First, extract the Z-axis rotation from the current brick (this is what we want to preserve and snap)
-        Vector3 currentEuler = currentRotation.eulerAngles;
-        float currentZ = currentEuler.z;
-        
-        // Snap the Z rotation to the closest 90 degrees
-        float snappedZ = Mathf.Round(currentZ / 90f) * 90f;
-        
-        // Create a rotation that aligns with the target brick's X and Y axes, but uses our snapped Z rotation
+        // Extract the rotations
+        Vector3 baseEuler = baseRotation.eulerAngles;
         Vector3 targetEuler = targetRotation.eulerAngles;
-        Quaternion finalRotation = Quaternion.Euler(targetEuler.x, targetEuler.y, snappedZ);
         
-        Debug.Log($"[{brick.name}] SnapToClosest90DegreeRotation() - Current Z: {currentZ:F1}° → {snappedZ:F1}°");
-        Debug.Log($"[{brick.name}] SnapToClosest90DegreeRotation() - Target rotation: {targetEuler}, Final rotation: {finalRotation.eulerAngles}");
+        float baseZ = baseEuler.z;
+        float targetZ = targetEuler.z;
+        
+        // Calculate the difference in Z rotation
+        float zDifference = targetZ - baseZ;
+        
+        // Normalize the difference to be within -180° to +180°
+        while (zDifference > 180f) zDifference -= 360f;
+        while (zDifference < -180f) zDifference += 360f;
+        
+        // Since bricks are square, we can snap to the closest 90° increment
+        // This means we only need to rotate by 0°, 90°, 180°, or 270°
+        float snappedZDifference = Mathf.Round(zDifference / 90f) * 90f;
+        
+        // Apply the snapped Z rotation to the base rotation
+        float finalZ = baseZ + snappedZDifference;
+        
+        // Create the final rotation by keeping the target's X and Y exactly as they are, but adjusting Z
+        Quaternion finalRotation = Quaternion.Euler(targetEuler.x, targetEuler.y, finalZ);
+        
+        Debug.Log($"[{brick.name}] AdjustZAxisToMatchTarget() - Base Z: {baseZ:F1}°");
+        Debug.Log($"[{brick.name}] AdjustZAxisToMatchTarget() - Target Z: {targetZ:F1}°");
+        Debug.Log($"[{brick.name}] AdjustZAxisToMatchTarget() - Z difference: {zDifference:F1}° → snapped to: {snappedZDifference:F1}°");
+        Debug.Log($"[{brick.name}] AdjustZAxisToMatchTarget() - Final Z: {finalZ:F1}°");
+        Debug.Log($"[{brick.name}] AdjustZAxisToMatchTarget() - Final rotation: {finalRotation.eulerAngles}");
         
         return finalRotation;
     }
@@ -292,8 +340,8 @@ public class BrickSnappingSystem
             var brickRb = brick.GetComponent<Rigidbody>();
             Debug.Log($"[{brick.name}] FinalizeSnap() - DEBUG: Physics before joint creation - isKinematic: {brickRb.isKinematic}, useGravity: {brickRb.useGravity}");
             
-            // Increase mass slightly to make the brick more stable
-            brickRb.mass = Mathf.Max(brickRb.mass, 1.0f);
+            // Normalize mass to prevent group weight accumulation
+            brickRb.mass = 1.0f; // Fixed mass regardless of group size
             // Set drag and angular drag from BrickBehavior
             brickRb.linearDamping = brick.brickDrag;
             brickRb.angularDamping = brick.brickAngularDrag;
@@ -308,7 +356,7 @@ public class BrickSnappingSystem
         // Also adjust the connected body's properties
         if (targetBrick.GetComponent<Rigidbody>() != null)
         {
-            targetBrick.GetComponent<Rigidbody>().mass = Mathf.Max(targetBrick.GetComponent<Rigidbody>().mass, 1.0f);
+            targetBrick.GetComponent<Rigidbody>().mass = 1.0f; // Normalize mass to prevent group weight accumulation
             targetBrick.GetComponent<Rigidbody>().linearDamping = brick.brickDrag;
             targetBrick.GetComponent<Rigidbody>().angularDamping = brick.brickAngularDrag;
         }
@@ -645,42 +693,32 @@ public class BrickSnappingSystem
         return connectingCount;
     }
 
-    public void Cleanup()
-    {
-        // Clean up any references
-        studManager?.Cleanup();
-    }
-
-    // Coroutine to stabilize the group after snap is complete
     private IEnumerator StabilizeGroupAfterSnap()
     {
-        // Wait a few frames to let physics settle
-        yield return new WaitForSeconds(0.1f);
+        Debug.Log($"[{brick.name}] StabilizeGroupAfterSnap() - Starting group stabilization after snap");
         
-        Debug.Log($"[{brick.name}] StabilizeGroupAfterSnap() - Stabilizing group after snap");
+        // Wait a short delay to let physics settle
+        yield return new WaitForSeconds(0.1f);
         
         // Find all bricks in the connected group
         List<BrickBehavior> groupBricks = new List<BrickBehavior>();
-        FindAllConnectedInGroup(brick, groupBricks);
+        BrickGroupUtils.FindAllConnectedInGroup(brick, groupBricks, brick.name);
         
-        Debug.Log($"[{brick.name}] StabilizeGroupAfterSnap() - DEBUG: Found {groupBricks.Count} bricks in group");
+        Debug.Log($"[{brick.name}] StabilizeGroupAfterSnap() - Found {groupBricks.Count} bricks in group to stabilize");
         
+        // Stabilize each brick in the group
         foreach (var groupBrick in groupBricks)
         {
-            if (groupBrick.GetComponent<Rigidbody>() != null)
+            if (groupBrick.GetComponent<Rigidbody>() != null && !groupBrick.GetComponent<UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable>().isSelected)
             {
-                var rb = groupBrick.GetComponent<Rigidbody>();
-                Debug.Log($"[{brick.name}] StabilizeGroupAfterSnap() - DEBUG: {groupBrick.name} physics before stabilization - isKinematic: {rb.isKinematic}, useGravity: {rb.useGravity}, velocity: {rb.linearVelocity}");
+                // Clear any residual velocities
+                groupBrick.GetComponent<Rigidbody>().linearVelocity = Vector3.zero;
+                groupBrick.GetComponent<Rigidbody>().angularVelocity = Vector3.zero;
                 
                 // Ensure proper physics state
-                rb.isKinematic = false;
-                rb.useGravity = true;
+                groupBrick.GetComponent<Rigidbody>().isKinematic = false;
+                groupBrick.GetComponent<Rigidbody>().useGravity = true;
                 
-                // Clear any residual velocities
-                rb.linearVelocity = Vector3.zero;
-                rb.angularVelocity = Vector3.zero;
-                
-                Debug.Log($"[{brick.name}] StabilizeGroupAfterSnap() - DEBUG: {groupBrick.name} physics after stabilization - isKinematic: {rb.isKinematic}, useGravity: {rb.useGravity}, velocity: {rb.linearVelocity}");
                 Debug.Log($"[{brick.name}] StabilizeGroupAfterSnap() - Stabilized {groupBrick.name}");
             }
         }
@@ -688,19 +726,13 @@ public class BrickSnappingSystem
         Debug.Log($"[{brick.name}] StabilizeGroupAfterSnap() - Group stabilization complete");
     }
 
-    // Helper method to find all connected bricks in a group
-    private void FindAllConnectedInGroup(BrickBehavior brick, List<BrickBehavior> visited)
+    public void Cleanup()
     {
-        if (brick == null || visited.Contains(brick))
-        {
-            return;
-        }
+        // Clear any stored references
+        snapTargetBrick = null;
+        targetSnapPosition = Vector3.zero;
+        targetSnapRotation = Quaternion.identity;
         
-        visited.Add(brick);
-        
-        foreach (var neighbor in brick.ConnectedNeighbors)
-        {
-            FindAllConnectedInGroup(neighbor, visited);
-        }
+        Debug.Log($"[{brick.name}] Cleanup() - Snap system cleanup complete");
     }
 } 

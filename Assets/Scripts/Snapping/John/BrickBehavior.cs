@@ -45,16 +45,15 @@ public class BrickBehavior : MonoBehaviour
     [Tooltip("Distance (in meters) to separate groups after a split to prevent immediate re-snapping.")]
     public float groupSplitSeparation = 0.2f;
 
-    [Header("Pattern Detection")]
-    [Tooltip("Threshold (in meters) for detecting significant stud spread in X or Z. Lower values make the system more sensitive to small patterns.")]
-    public float patternDetectThreshold = 0.01f;
-
     [Header("Physics Properties")]
-    [Tooltip("Rigidbody drag applied to bricks for stability. Higher values make bricks less slippery.")]
-    public float brickDrag = 0.5f;
+    [Tooltip("Linear drag coefficient for the brick's rigidbody. Higher values make the brick more stable and less likely to slide.")]
+    public float brickDrag = 2.0f;
 
-    [Tooltip("Rigidbody angular drag applied to bricks for rotational stability. Higher values reduce spinning.")]
-    public float brickAngularDrag = 0.5f;
+    [Tooltip("Angular drag coefficient for the brick's rigidbody. Higher values make the brick more stable and less likely to rotate unexpectedly.")]
+    public float brickAngularDrag = 2.0f;
+
+    [Tooltip("Physics material for additional friction control. Create a material with high static friction (0.8-1.0) for better stability.")]
+    public PhysicsMaterial brickPhysicsMaterial;
 
     [Header("Performance & Timing")]
     [Tooltip("Cooldown (in seconds) to prevent repeated collision events between studs.")]
@@ -178,6 +177,17 @@ public class BrickBehavior : MonoBehaviour
 
         Debug.Log($"[{name}] Awake() - Components acquired: XRGrabInteractable={grabInteractable != null}, Rigidbody={rb != null}, OriginalParent={originalParent?.name ?? "null"}");
 
+        // Apply physics material for better friction if assigned
+        if (brickPhysicsMaterial != null)
+        {
+            var collider = GetComponent<Collider>();
+            if (collider != null)
+            {
+                collider.material = brickPhysicsMaterial;
+                Debug.Log($"[{name}] Awake() - Applied physics material: {brickPhysicsMaterial.name}");
+            }
+        }
+
         // Initialize managers
         InitializeManagers();
 
@@ -195,21 +205,6 @@ public class BrickBehavior : MonoBehaviour
 
     void Update()
     {
-        if (isSnapping && currentState == BrickState.Snapping)
-        {
-            // Instant snap - move directly to target position and rotation
-            Debug.Log($"[{name}] Update() - DEBUG: Before snap animation - current position: {transform.position}, target position: {targetSnapPosition}");
-            Debug.Log($"[{name}] Update() - DEBUG: Before snap animation - current rotation: {transform.rotation.eulerAngles}, target rotation: {targetSnapRotation.eulerAngles}");
-            
-            transform.position = targetSnapPosition;
-            transform.rotation = targetSnapRotation;
-            
-            Debug.Log($"[{name}] Update() - Instant snap complete - position: {transform.position}, rotation: {transform.rotation.eulerAngles}");
-            
-            // Immediately finalize the snap
-            snappingSystem?.FinalizeSnap();
-        }
-        
         // Periodically check for group joining opportunities when grabbed
         if (grabInteractable.isSelected && currentState == BrickState.Grabbing)
         {
@@ -217,6 +212,47 @@ public class BrickBehavior : MonoBehaviour
             if (Time.frameCount % 10 == 0)
             {
                 groupOperations?.CheckForGroupJoiningOpportunities();
+            }
+        }
+    }
+    
+    void FixedUpdate()
+    {
+        if (isSnapping && currentState == BrickState.Snapping)
+        {
+            // Smooth snap animation using lerp/slerp with fixed timestep
+            // This provides more consistent timing than variable frame rate
+            float snapSpeed = this.snapSpeed; // Use the serialized snapSpeed property
+            
+            // Adjust for fixed timestep - Time.fixedDeltaTime is typically 0.02 (50fps)
+            // This provides more controlled animation speed
+            float lerpFactor = Mathf.Clamp01(snapSpeed * Time.fixedDeltaTime);
+            
+            // Lerp position towards target with fixed timestep
+            transform.position = Vector3.Lerp(transform.position, targetSnapPosition, lerpFactor);
+            
+            // Slerp rotation towards target with fixed timestep
+            transform.rotation = Quaternion.Slerp(transform.rotation, targetSnapRotation, lerpFactor);
+            
+            // Check if we're close enough to consider the snap complete
+            float positionDistance = Vector3.Distance(transform.position, targetSnapPosition);
+            float rotationDistance = Quaternion.Angle(transform.rotation, targetSnapRotation);
+            
+            // Use a threshold that accounts for the snapOffset (0.001f) plus some tolerance
+            float completionThreshold = 0.002f; // 2mm threshold to account for offset + tolerance
+            float rotationThreshold = 0.1f; // Much tighter rotation threshold (0.1 degrees)
+            
+            if (positionDistance < completionThreshold && rotationDistance < rotationThreshold) // Within 2mm and 0.1 degrees
+            {
+                Debug.Log($"[{name}] FixedUpdate() - Snap animation complete - position: {transform.position}, rotation: {transform.rotation.eulerAngles}");
+                Debug.Log($"[{name}] FixedUpdate() - Final distance to target: {positionDistance:F6}, threshold: {completionThreshold}");
+                
+                // Snap to exact target to ensure perfect alignment
+                transform.position = targetSnapPosition;
+                transform.rotation = targetSnapRotation;
+                
+                // Finalize the snap
+                snappingSystem?.FinalizeSnap();
             }
         }
     }
@@ -297,7 +333,7 @@ public class BrickBehavior : MonoBehaviour
             
             // Find all bricks in the connected group
             List<BrickBehavior> allGroupBricks = new List<BrickBehavior>();
-            FindAllConnectedInGroup(this, allGroupBricks);
+            BrickGroupUtils.FindAllConnectedInGroup(this, allGroupBricks, name);
             Debug.Log($"[{name}] OnGrabStarted() - Found {allGroupBricks.Count} total bricks in group");
             
             // Check if any other brick in the group is already being grabbed by a different interactor
@@ -377,8 +413,8 @@ public class BrickBehavior : MonoBehaviour
             Debug.Log($"[{name}] OnGrabReleased() - Set justReleased flag to true");
         
             // Reset the flag after a short delay to prevent accidental snaps later
-            Invoke(nameof(ResetReleaseFlag), 0.2f);
-            Debug.Log($"[{name}] OnGrabReleased() - Scheduled ResetReleaseFlag in 0.2 seconds");
+            Invoke(nameof(ResetReleaseFlag), releaseFlagDelay);
+            Debug.Log($"[{name}] OnGrabReleased() - Scheduled ResetReleaseFlag in {releaseFlagDelay} seconds");
 
             // Execute any stored potential snap with the captured release position
             ExecuteStoredSnap(releasePosition, releaseRotation);
@@ -522,23 +558,7 @@ public class BrickBehavior : MonoBehaviour
 
     public static bool AreBricksInSameGroup(BrickBehavior brick1, BrickBehavior brick2)
     {
-        return brick1?.groupOperations?.AreInSameGroup(brick1, brick2) ?? false;
-    }
-
-    // Helper method to find all connected bricks in a group
-    private void FindAllConnectedInGroup(BrickBehavior brick, List<BrickBehavior> visited)
-    {
-        if (brick == null || visited.Contains(brick))
-        {
-            return;
-        }
-
-        visited.Add(brick);
-        
-        foreach (var neighbor in brick.ConnectedNeighbors)
-        {
-            FindAllConnectedInGroup(neighbor, visited);
-        }
+        return BrickGroupUtils.AreBricksInSameGroup(brick1, brick2);
     }
 
     // Coroutine to delay physics manager call until snap animation is complete
