@@ -214,19 +214,16 @@ public class BrickPhysicsManager
             }
             else
             {
+                // Always restore physics for non-grabbed bricks
+                groupBrick.GetComponent<Rigidbody>().isKinematic = false;
+                groupBrick.GetComponent<Rigidbody>().useGravity = true;
+                
                 if (isMaster)
                 {
-                    // Master brick should be dynamic with gravity
-                    groupBrick.GetComponent<Rigidbody>().isKinematic = false;
-                    groupBrick.GetComponent<Rigidbody>().useGravity = true;
                     Debug.Log($"[{brick.name}] UpdateMaster() - Set {groupBrick.name}'s physics (master): isKinematic=false, useGravity=true");
                 }
                 else
                 {
-                    // Non-master bricks should be dynamic with gravity
-                    // They will follow the master via FixedJoints but can still respond to physics
-                    groupBrick.GetComponent<Rigidbody>().isKinematic = false;
-                    groupBrick.GetComponent<Rigidbody>().useGravity = true;
                     Debug.Log($"[{brick.name}] UpdateMaster() - Set {groupBrick.name}'s physics (non-master): isKinematic=false, useGravity=true");
                 }
             }

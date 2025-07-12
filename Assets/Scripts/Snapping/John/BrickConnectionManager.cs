@@ -113,6 +113,13 @@ public class BrickConnectionManager
 
     public void UpdateMaster(BrickBehavior newMaster)
     {
+        // Prevent recursive calls - if we're already updating to this master, skip
+        if (m_MasterBrick == newMaster)
+        {
+            Debug.Log($"[{brick.name}] UpdateMaster() - Already master of {newMaster.name}, skipping update");
+            return;
+        }
+        
         Debug.Log($"[{brick.name}] UpdateMaster() - Updating group master to: {newMaster.name}");
         
         List<BrickBehavior> groupToUpdate = new List<BrickBehavior>();
@@ -153,6 +160,8 @@ public class BrickConnectionManager
                 groupBrick.GetComponent<Rigidbody>().useGravity = true;
             }
         }
+        
+        Debug.Log($"[{brick.name}] UpdateMaster() - Master update complete");
     }
 
     public void UnsnapFrom(BrickBehavior otherBrick)
@@ -224,6 +233,20 @@ public class BrickConnectionManager
         else
         {
             Debug.Log($"[{brick.name}] UnsnapFrom() - Skipping physics change for this brick (currently grabbed by XRGrabInteractable)");
+        }
+        
+        // IMPORTANT: Also restore physics for the other brick if it's not grabbed
+        if (!otherBrick.GetComponent<UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable>().isSelected)
+        {
+            otherBrick.GetComponent<Rigidbody>().isKinematic = false;
+            otherBrick.GetComponent<Rigidbody>().useGravity = true;
+            otherBrick.GetComponent<Rigidbody>().mass = 1.0f;
+            
+            Debug.Log($"[{brick.name}] UnsnapFrom() - Restored physics for other brick {otherBrick.name}: isKinematic=false, useGravity=true, mass=1.0f");
+        }
+        else
+        {
+            Debug.Log($"[{brick.name}] UnsnapFrom() - Skipping physics change for other brick {otherBrick.name} (currently grabbed by XRGrabInteractable)");
         }
         
         UpdateMaster(brick);

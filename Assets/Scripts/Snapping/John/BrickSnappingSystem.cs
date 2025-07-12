@@ -54,6 +54,42 @@ public class BrickSnappingSystem
         // DEBUG: Log positions of both bricks and studs
         Debug.Log($"[{brick.name}] RequestSnap() - DEBUG: Grabbed brick position: {brick.transform.position}, rotation: {brick.transform.rotation.eulerAngles}");
         Debug.Log($"[{brick.name}] RequestSnap() - DEBUG: Target brick position: {targetBrick.transform.position}, rotation: {targetBrick.transform.rotation.eulerAngles}");
+        
+        // Calculate and log the relative rotation at release time
+        // Use Vector3.SignedAngle to get the true relative rotation around the shared local Z-axis
+        Vector3 brickRight = brick.transform.rotation * Vector3.right;  // The "+X" direction of released brick
+        Vector3 targetRight = targetBrick.transform.rotation * Vector3.right;  // The "+X" direction of target brick
+        
+        // Calculate the signed angle from target's right-vector to released's right-vector around world Z
+        float relativeZ = Vector3.SignedAngle(targetRight, brickRight, Vector3.forward);
+        
+        Debug.Log($"[{brick.name}] RequestSnap() - DEBUG: Relative rotation at release - Z: {relativeZ:F1}°");
+        Debug.Log($"[{brick.name}] RequestSnap() - DEBUG: Grabbed brick rotation: {brick.transform.rotation.eulerAngles}");
+        Debug.Log($"[{brick.name}] RequestSnap() - DEBUG: Target brick rotation: {targetBrick.transform.rotation.eulerAngles}");
+        Debug.Log($"[{brick.name}] RequestSnap() - DEBUG: Grabbed brick right vector: {brickRight}");
+        Debug.Log($"[{brick.name}] RequestSnap() - DEBUG: Target brick right vector: {targetRight}");
+        
+        // ADDITIONAL DEBUG: Check if the relative rotation makes sense for LEGO bricks
+        // For LEGO bricks at 90° relative rotation, we expect the relative Z to be close to 90°, -90°, 180°, or -180°
+        float absRelativeZ = Mathf.Abs(relativeZ);
+        if (absRelativeZ < 10f)
+        {
+            Debug.Log($"[{brick.name}] RequestSnap() - DEBUG: WARNING: Relative Z rotation is very small ({relativeZ:F1}°), bricks appear to be aligned!");
+        }
+        else if (absRelativeZ > 80f && absRelativeZ < 100f)
+        {
+            Debug.Log($"[{brick.name}] RequestSnap() - DEBUG: Relative Z rotation is close to 90° ({relativeZ:F1}°), this is expected for LEGO bricks!");
+        }
+        else if (absRelativeZ > 170f && absRelativeZ < 190f)
+        {
+            Debug.Log($"[{brick.name}] RequestSnap() - DEBUG: Relative Z rotation is close to 180° ({relativeZ:F1}°), this is expected for LEGO bricks!");
+        }
+        else
+        {
+            Debug.Log($"[{brick.name}] RequestSnap() - DEBUG: Relative Z rotation is {relativeZ:F1}°, not a standard LEGO alignment!");
+        }
+        
+
         Debug.Log($"[{brick.name}] RequestSnap() - DEBUG: Our stud world position: {ourStud.transform.position}");
         Debug.Log($"[{brick.name}] RequestSnap() - DEBUG: Target stud world position: {targetStud.transform.position}");
         Debug.Log($"[{brick.name}] RequestSnap() - DEBUG: Distance between studs: {Vector3.Distance(ourStud.transform.position, targetStud.transform.position):F6}");
@@ -101,15 +137,37 @@ public class BrickSnappingSystem
             Debug.Log($"[{brick.name}] RequestSnap() - Using single snap point: {targetStud.name}");
         }
 
-        // Calculate snap position and rotation
-        CalculateSnapTransform(ourStud, targetStud, targetBrick);
+        // Store target brick's initial rotation for debugging
+        Vector3 initialTargetRotation = targetBrick.transform.rotation.eulerAngles;
+        Debug.Log($"[{brick.name}] RequestSnap() - DEBUG: Target brick initial rotation: {initialTargetRotation}");
 
-        // Disable physics during snap
+        // Calculate snap position and rotation
+        Debug.Log($"[{brick.name}] RequestSnap() - About to call CalculateSnapTransform");
+        CalculateSnapTransform(ourStud, targetStud, targetBrick);
+        Debug.Log($"[{brick.name}] RequestSnap() - CalculateSnapTransform completed");
+        
+        // Check if target brick rotation changed during calculation
+        Vector3 finalTargetRotation = targetBrick.transform.rotation.eulerAngles;
+        if (Vector3.Distance(initialTargetRotation, finalTargetRotation) > 0.1f)
+        {
+            Debug.LogWarning($"[{brick.name}] RequestSnap() - WARNING: Target brick rotation changed during snap calculation!");
+            Debug.LogWarning($"[{brick.name}] RequestSnap() - Initial: {initialTargetRotation}, Final: {finalTargetRotation}");
+        }
+
+        // Disable physics during snap for both bricks to prevent interference
         if (brick.GetComponent<Rigidbody>() != null)
         {
             brick.GetComponent<Rigidbody>().isKinematic = true;
             brick.GetComponent<Rigidbody>().useGravity = false;
             Debug.Log($"[{brick.name}] RequestSnap() - Disabled physics for snap animation");
+        }
+        
+        // IMPORTANT: Also disable physics on target brick to prevent it from moving during snap
+        if (targetBrick.GetComponent<Rigidbody>() != null)
+        {
+            targetBrick.GetComponent<Rigidbody>().isKinematic = true;
+            targetBrick.GetComponent<Rigidbody>().useGravity = false;
+            Debug.Log($"[{brick.name}] RequestSnap() - Disabled physics on target brick to prevent interference");
         }
 
         // Set snapping state
@@ -123,6 +181,9 @@ public class BrickSnappingSystem
         targetStud.SetSnapping(true);
 
         Debug.Log($"[{brick.name}] RequestSnap() - Snap initiated. Target position: {targetSnapPosition}, Target rotation: {targetSnapRotation.eulerAngles}");
+        Debug.Log($"[{brick.name}] RequestSnap() - Current brick position: {brick.transform.position}, Current rotation: {brick.transform.rotation.eulerAngles}");
+        Debug.Log($"[{brick.name}] RequestSnap() - Position difference: {Vector3.Distance(brick.transform.position, targetSnapPosition):F6}");
+        Debug.Log($"[{brick.name}] RequestSnap() - Rotation difference: {Quaternion.Angle(brick.transform.rotation, targetSnapRotation):F2}°");
     }
 
     private void CalculateSnapTransform(Stud ourStud, Stud targetStud, BrickBehavior targetBrick)
@@ -153,20 +214,36 @@ public class BrickSnappingSystem
         Quaternion targetBrickRotation = targetBrick.transform.rotation;
         Debug.Log($"[{brick.name}] CalculateSnapTransform() - Using target brick rotation for position calculation: {targetBrickRotation.eulerAngles}");
 
-        // Calculate the final position using a single, precise calculation:
+        // Calculate the final position using a simpler, more direct approach
         // We want our stud to end up at the target stud's world position
-        // So our brick center needs to be: target stud position - (our stud's world position after rotation)
-        Vector3 finalPosition = targetStudWorldPos - (targetBrickRotation * ourStudLocalPos);
+        // So our brick center needs to be: target stud position - (our stud's position in final rotation)
         
-        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Initial position calculation: {targetStudWorldPos} - (rotated {ourStudLocalPos}) = {finalPosition}");
+        // First calculate the final rotation
+        Debug.Log($"[{brick.name}] CalculateSnapTransform() - About to call AdjustZAxisToMatchTarget");
+        Quaternion finalRotation = AdjustZAxisToMatchTarget(brick.transform.rotation, targetBrick);
+        Debug.Log($"[{brick.name}] CalculateSnapTransform() - AdjustZAxisToMatchTarget completed, final rotation: {finalRotation.eulerAngles}");
         
-        // Calculate offset using the direction from target brick center to target stud
-        // This gives us the natural direction the target stud faces
-        Vector3 targetBrickToStud = (targetStudWorldPos - targetBrick.transform.position).normalized;
-        Vector3 snapOffset = targetBrickToStud * 0.001f; // 1mm offset in stud direction
+        // Calculate where our stud will be in the final rotation
+        Vector3 ourStudInFinalRotation = finalRotation * ourStudLocalPos;
+        
+        // Calculate final position: target stud position - our stud position in final rotation
+        Vector3 finalPosition = targetStudWorldPos - ourStudInFinalRotation;
+        
+        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Our stud local position: {ourStudLocalPos}");
+        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Our stud in final rotation: {ourStudInFinalRotation}");
+        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Initial position calculation: {targetStudWorldPos} - {ourStudInFinalRotation} = {finalPosition}");
+        
+        // Calculate offset using the direction from relative target brick center to target stud
+        // This creates a "relative target brick center" that works for any brick size
+        Vector3 targetStudLocalPos = targetStud.transform.localPosition;
+        Vector3 relativeTargetBrickCenter = targetStudWorldPos - (targetBrick.transform.rotation * targetStudLocalPos);
+        Vector3 relativeTargetBrickToStud = (targetStudWorldPos - relativeTargetBrickCenter).normalized;
+        Vector3 snapOffset = relativeTargetBrickToStud * 0.001f; // 1mm offset in stud direction
         finalPosition += snapOffset;
         
-        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Target brick to stud direction: {targetBrickToStud}");
+        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Target stud local position: {targetStudLocalPos}");
+        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Relative target brick center: {relativeTargetBrickCenter}");
+        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Relative target brick to stud direction: {relativeTargetBrickToStud}");
         Debug.Log($"[{brick.name}] CalculateSnapTransform() - Added snap offset: {snapOffset}");
         Debug.Log($"[{brick.name}] CalculateSnapTransform() - Position after offset: {finalPosition}");
         
@@ -206,11 +283,21 @@ public class BrickSnappingSystem
         }
         
         // STEP 3: Calculate final rotation by adjusting only Z-axis (max 45°)
-        // Use the target brick rotation from step 1 as the starting point, then adjust Z-axis
-        Quaternion finalRotation = AdjustZAxisToMatchTarget(targetBrickRotation, targetBrick);
+        // Use the released brick's current rotation as the starting point, then adjust Z-axis
+        // FIXED: finalRotation is already calculated above for position calculation
         Debug.Log($"[{brick.name}] CalculateSnapTransform() - Final rotation after Z-axis adjustment: {finalRotation.eulerAngles}");
         
         Debug.Log($"[{brick.name}] CalculateSnapTransform() - Final position: {finalPosition}, Rotation: {finalRotation.eulerAngles}");
+
+        // ADD DEBUGGING: Show expected snap point positions after transformation
+        // Calculate where our stud will be after the brick is moved and rotated
+        Vector3 expectedOurStudPosition = finalPosition + (finalRotation * ourStudLocalPos);
+        
+        Debug.Log($"[{brick.name}] CalculateSnapTransform() - DEBUG: EXPECTED SNAP POINT ALIGNMENT:");
+        Debug.Log($"[{brick.name}] CalculateSnapTransform() - DEBUG: Expected our stud position: {expectedOurStudPosition}");
+        Debug.Log($"[{brick.name}] CalculateSnapTransform() - DEBUG: Target stud position: {targetStudWorldPos}");
+        Debug.Log($"[{brick.name}] CalculateSnapTransform() - DEBUG: Alignment difference: {expectedOurStudPosition - targetStudWorldPos}");
+        Debug.Log($"[{brick.name}] CalculateSnapTransform() - DEBUG: Alignment distance: {Vector3.Distance(expectedOurStudPosition, targetStudWorldPos):F6}");
 
         targetSnapPosition = finalPosition;
         targetSnapRotation = finalRotation;
@@ -225,45 +312,76 @@ public class BrickSnappingSystem
     }
     
     // Method to adjust the Z-axis of the snapping brick to match the target brick's Z-axis
-    private Quaternion AdjustZAxisToMatchTarget(Quaternion baseRotation, BrickBehavior targetBrick)
+    private Quaternion AdjustZAxisToMatchTarget(Quaternion releasedBrickRotation, BrickBehavior targetBrick)
     {
         // Get the target brick's rotation
         Quaternion targetRotation = targetBrick.transform.rotation;
         
-        // For LEGO-like bricks, we want to:
-        // 1. Start with the base rotation (target brick rotation from step 1)
-        // 2. Take the target brick's rotation AS-IS (don't normalize it)
-        // 3. Only adjust the Z-axis to match the target's Z-axis
-        // 4. Since bricks are square, we never need more than 45° rotation
+        // Calculate the relative rotation around the shared local Z-axis of the bricks
+        // This is the "twist" between two identically-tilted bricks
+        // Use Vector3.SignedAngle to compare the right vectors around world Z (which is their local Z)
+        Vector3 releasedRight = releasedBrickRotation * Vector3.right;  // The "+X" direction of released brick
+        Vector3 targetRight = targetRotation * Vector3.right;          // The "+X" direction of target brick
         
-        // Extract the rotations
-        Vector3 baseEuler = baseRotation.eulerAngles;
-        Vector3 targetEuler = targetRotation.eulerAngles;
+        // Calculate the signed angle from target's right-vector to released's right-vector around world Z
+        // This gives us how much the released brick is rotated relative to the target brick around their shared Z-axis
+        float relativeZ = Vector3.SignedAngle(targetRight, releasedRight, Vector3.forward);
         
-        float baseZ = baseEuler.z;
-        float targetZ = targetEuler.z;
+        // Vector3.SignedAngle already returns a value in the range -180° to +180°
         
-        // Calculate the difference in Z rotation
-        float zDifference = targetZ - baseZ;
+        Debug.Log($"[{brick.name}] AdjustZAxisToMatchTarget() - Relative rotation between bricks: {relativeZ:F1}°");
+        Debug.Log($"[{brick.name}] AdjustZAxisToMatchTarget() - Released brick right vector: {releasedRight}");
+        Debug.Log($"[{brick.name}] AdjustZAxisToMatchTarget() - Target brick right vector: {targetRight}");
         
-        // Normalize the difference to be within -180° to +180°
-        while (zDifference > 180f) zDifference -= 360f;
-        while (zDifference < -180f) zDifference += 360f;
+        // Snap to closest 90° increment
+        float snappedRelativeZ = Mathf.Round(relativeZ / 90f) * 90f;
         
-        // Since bricks are square, we can snap to the closest 90° increment
-        // This means we only need to rotate by 0°, 90°, 180°, or 270°
-        float snappedZDifference = Mathf.Round(zDifference / 90f) * 90f;
+        // For LEGO bricks, we want to prefer 90° relative alignment over 0° alignment
+        // This is because LEGO bricks are typically arranged in 90° increments
+        if (Mathf.Abs(snappedRelativeZ) < 0.1f)
+        {
+            // If we would snap to 0° (aligned), check if we should force 90° instead
+            // Force 90° if the original relative rotation is not very close to 0°
+            // Also force 90° if the relative rotation is ambiguous (between 5° and 45°)
+            if (Mathf.Abs(relativeZ) > 5f)
+            {
+                // Choose the direction that requires the least rotation
+                float clockwise90 = 90f;
+                float counterclockwise90 = -90f;
+                
+                // Use the direction that's closer to the original relative rotation
+                snappedRelativeZ = (Mathf.Abs(relativeZ - clockwise90) < Mathf.Abs(relativeZ - counterclockwise90)) ? clockwise90 : counterclockwise90;
+                
+                Debug.Log($"[{brick.name}] AdjustZAxisToMatchTarget() - Forced 90° relative alignment: {snappedRelativeZ:F1}° (chosen from {relativeZ:F1}°)");
+            }
+            else if (Mathf.Abs(relativeZ) > 2f)
+            {
+                // Even for small relative rotations, if they're not exactly 0°, prefer 90° alignment
+                // This handles cases where the bricks are "almost" aligned but should snap at 90°
+                float clockwise90 = 90f;
+                float counterclockwise90 = -90f;
+                
+                // Use the direction that's closer to the original relative rotation
+                snappedRelativeZ = (Mathf.Abs(relativeZ - clockwise90) < Mathf.Abs(relativeZ - counterclockwise90)) ? clockwise90 : counterclockwise90;
+                
+                Debug.Log($"[{brick.name}] AdjustZAxisToMatchTarget() - Forced 90° relative alignment for near-aligned bricks: {snappedRelativeZ:F1}° (chosen from {relativeZ:F1}°)");
+            }
+            else
+            {
+                Debug.Log($"[{brick.name}] AdjustZAxisToMatchTarget() - Bricks are truly aligned (0° relative), keeping alignment");
+            }
+        }
         
-        // Apply the snapped Z rotation to the base rotation
-        float finalZ = baseZ + snappedZDifference;
+        // Apply the snapped relative rotation to the target brick's rotation
+        Quaternion zAdjustment = Quaternion.Euler(0f, 0f, snappedRelativeZ);
+        Quaternion finalRotation = targetRotation * zAdjustment;
         
-        // Create the final rotation by keeping the target's X and Y exactly as they are, but adjusting Z
-        Quaternion finalRotation = Quaternion.Euler(targetEuler.x, targetEuler.y, finalZ);
+        Debug.Log($"[{brick.name}] AdjustZAxisToMatchTarget() - Original relative Z: {relativeZ:F1}° → snapped to: {snappedRelativeZ:F1}°");
+        Debug.Log($"[{brick.name}] AdjustZAxisToMatchTarget() - Final relative rotation will be: {snappedRelativeZ:F1}°");
         
-        Debug.Log($"[{brick.name}] AdjustZAxisToMatchTarget() - Base Z: {baseZ:F1}°");
-        Debug.Log($"[{brick.name}] AdjustZAxisToMatchTarget() - Target Z: {targetZ:F1}°");
-        Debug.Log($"[{brick.name}] AdjustZAxisToMatchTarget() - Z difference: {zDifference:F1}° → snapped to: {snappedZDifference:F1}°");
-        Debug.Log($"[{brick.name}] AdjustZAxisToMatchTarget() - Final Z: {finalZ:F1}°");
+        // Additional debugging to understand the rotation calculation
+        Debug.Log($"[{brick.name}] AdjustZAxisToMatchTarget() - Released brick rotation: {releasedBrickRotation.eulerAngles}");
+        Debug.Log($"[{brick.name}] AdjustZAxisToMatchTarget() - Target brick rotation: {targetRotation.eulerAngles}");
         Debug.Log($"[{brick.name}] AdjustZAxisToMatchTarget() - Final rotation: {finalRotation.eulerAngles}");
         
         return finalRotation;
@@ -353,12 +471,16 @@ public class BrickSnappingSystem
             Debug.Log($"[{brick.name}] FinalizeSnap() - DEBUG: Physics after restoration - isKinematic: {brickRb.isKinematic}, useGravity: {brickRb.useGravity}, mass: {brickRb.mass}");
         }
         
-        // Also adjust the connected body's properties
+    // IMPORTANT: Also restore physics on target brick
         if (targetBrick.GetComponent<Rigidbody>() != null)
         {
-            targetBrick.GetComponent<Rigidbody>().mass = 1.0f; // Normalize mass to prevent group weight accumulation
-            targetBrick.GetComponent<Rigidbody>().linearDamping = brick.brickDrag;
-            targetBrick.GetComponent<Rigidbody>().angularDamping = brick.brickAngularDrag;
+        var targetRb = targetBrick.GetComponent<Rigidbody>();
+        targetRb.isKinematic = false;
+        targetRb.useGravity = true;
+        targetRb.mass = 1.0f; // Normalize mass to prevent group weight accumulation
+        targetRb.linearDamping = brick.brickDrag;
+        targetRb.angularDamping = brick.brickAngularDrag;
+        Debug.Log($"[{brick.name}] FinalizeSnap() - Restored physics on target brick: isKinematic=false, useGravity=true");
         }
 
         // This brick is no longer its own master. It's now a "slave" to the other group
@@ -432,6 +554,21 @@ public class BrickSnappingSystem
         }
         
         Debug.Log($"[{brick.name}] ValidateAndCorrectAlignment() - Closest stud pair: {closestOurStud?.name} to {closestTargetStud?.name}, distance: {minDistance}");
+        
+        // ADD DETAILED SNAP POINT ALIGNMENT DEBUGGING
+        if (closestOurStud != null && closestTargetStud != null)
+        {
+            Debug.Log($"[{brick.name}] ValidateAndCorrectAlignment() - DEBUG: DETAILED ALIGNMENT CHECK:");
+            Debug.Log($"[{brick.name}] ValidateAndCorrectAlignment() - DEBUG: Our stud '{closestOurStud.name}' position: {closestOurStud.transform.position}");
+            Debug.Log($"[{brick.name}] ValidateAndCorrectAlignment() - DEBUG: Target stud '{closestTargetStud.name}' position: {closestTargetStud.transform.position}");
+            Debug.Log($"[{brick.name}] ValidateAndCorrectAlignment() - DEBUG: Position difference: {closestOurStud.transform.position - closestTargetStud.transform.position}");
+            Debug.Log($"[{brick.name}] ValidateAndCorrectAlignment() - DEBUG: Distance: {minDistance:F6}");
+            Debug.Log($"[{brick.name}] ValidateAndCorrectAlignment() - DEBUG: Snap tolerance: {brick.snapTolerance:F6}");
+            Debug.Log($"[{brick.name}] ValidateAndCorrectAlignment() - DEBUG: Our brick position: {brick.transform.position}");
+            Debug.Log($"[{brick.name}] ValidateAndCorrectAlignment() - DEBUG: Target brick position: {targetBrick.transform.position}");
+            Debug.Log($"[{brick.name}] ValidateAndCorrectAlignment() - DEBUG: Our brick rotation: {brick.transform.rotation.eulerAngles}");
+            Debug.Log($"[{brick.name}] ValidateAndCorrectAlignment() - DEBUG: Target brick rotation: {targetBrick.transform.rotation.eulerAngles}");
+        }
         
         // REMOVED: Position correction logic that was causing incorrect positioning
         // The snap calculation already positions the brick correctly for stud alignment

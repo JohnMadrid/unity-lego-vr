@@ -312,6 +312,18 @@ public class BrickGroupOperations
                 {
                     groupBrick.GetComponent<Rigidbody>().mass = 1.0f;
                     Debug.Log($"[{brick.name}] SplitConnectedGroup() - Restored mass for {groupBrick.name}: mass=1.0f");
+                    
+                    // IMPORTANT: Restore physics for ALL bricks in the group, not just the master
+                    if (!groupBrick.GetComponent<UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable>().isSelected)
+                    {
+                        groupBrick.GetComponent<Rigidbody>().isKinematic = false;
+                        groupBrick.GetComponent<Rigidbody>().useGravity = true;
+                        Debug.Log($"[{brick.name}] SplitConnectedGroup() - Restored physics for {groupBrick.name}: isKinematic=false, useGravity=true");
+                    }
+                    else
+                    {
+                        Debug.Log($"[{brick.name}] SplitConnectedGroup() - Skipping physics change for {groupBrick.name} (currently grabbed by XRGrabInteractable)");
+                    }
                 }
             }
             

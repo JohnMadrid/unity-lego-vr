@@ -220,6 +220,10 @@ public class BrickBehavior : MonoBehaviour
     {
         if (isSnapping && currentState == BrickState.Snapping)
         {
+            // Store initial distances for comparison
+            float initialPositionDistance = Vector3.Distance(transform.position, targetSnapPosition);
+            float initialRotationDistance = Quaternion.Angle(transform.rotation, targetSnapRotation);
+            
             // Smooth snap animation using lerp/slerp with fixed timestep
             // This provides more consistent timing than variable frame rate
             float snapSpeed = this.snapSpeed; // Use the serialized snapSpeed property
@@ -228,11 +232,31 @@ public class BrickBehavior : MonoBehaviour
             // This provides more controlled animation speed
             float lerpFactor = Mathf.Clamp01(snapSpeed * Time.fixedDeltaTime);
             
-            // Lerp position towards target with fixed timestep
-            transform.position = Vector3.Lerp(transform.position, targetSnapPosition, lerpFactor);
+            // Calculate new position and rotation
+            Vector3 newPosition = Vector3.Lerp(transform.position, targetSnapPosition, lerpFactor);
+            Quaternion newRotation = Quaternion.Slerp(transform.rotation, targetSnapRotation, lerpFactor);
             
-            // Slerp rotation towards target with fixed timestep
-            transform.rotation = Quaternion.Slerp(transform.rotation, targetSnapRotation, lerpFactor);
+            // SAFEGUARD: Only apply changes if they move us closer to the target
+            float newPositionDistance = Vector3.Distance(newPosition, targetSnapPosition);
+            float newRotationDistance = Quaternion.Angle(newRotation, targetSnapRotation);
+            
+            if (newPositionDistance <= initialPositionDistance)
+            {
+                transform.position = newPosition;
+            }
+            else
+            {
+                Debug.LogWarning($"[{name}] FixedUpdate() - WARNING: Position animation diverging! Old distance: {initialPositionDistance:F6}, New distance: {newPositionDistance:F6}");
+            }
+            
+            if (newRotationDistance <= initialRotationDistance)
+            {
+                transform.rotation = newRotation;
+            }
+            else
+            {
+                Debug.LogWarning($"[{name}] FixedUpdate() - WARNING: Rotation animation diverging! Old distance: {initialRotationDistance:F2}, New distance: {newRotationDistance:F2}");
+            }
             
             // Check if we're close enough to consider the snap complete
             float positionDistance = Vector3.Distance(transform.position, targetSnapPosition);
@@ -241,6 +265,12 @@ public class BrickBehavior : MonoBehaviour
             // Use a threshold that accounts for the snapOffset (0.001f) plus some tolerance
             float completionThreshold = 0.002f; // 2mm threshold to account for offset + tolerance
             float rotationThreshold = 0.1f; // Much tighter rotation threshold (0.1 degrees)
+            
+            // Add debug logging every 10 frames to track progress
+            if (Time.frameCount % 10 == 0)
+            {
+                Debug.Log($"[{name}] FixedUpdate() - Snap progress - Position distance: {positionDistance:F6}, Rotation distance: {rotationDistance:F2}, Thresholds: {completionThreshold:F6}, {rotationThreshold:F2}");
+            }
             
             if (positionDistance < completionThreshold && rotationDistance < rotationThreshold) // Within 2mm and 0.1 degrees
             {
@@ -611,6 +641,14 @@ public class BrickBehavior : MonoBehaviour
         }
         
         physicsManager?.OnGrabReleased();
+        
+        // IMPORTANT: Force restore physics if the brick is not actually grabbed but still has kinematic physics
+        if (rb != null && !grabInteractable.isSelected && rb.isKinematic)
+        {
+            Debug.LogWarning($"[{name}] DelayedPhysicsManagerCall() - WARNING: Brick appears to be kinematic but not grabbed! Force restoring physics.");
+            rb.isKinematic = false;
+            rb.useGravity = true;
+        }
         
         if (rb != null)
         {
