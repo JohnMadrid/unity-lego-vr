@@ -10,7 +10,9 @@ public class XRGrabInteractableBridge : MonoBehaviour
     void Awake()
     {
         _grabInteractable = GetComponent<UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable>();
+        //Debug.Log($"grabInteractable: {_grabInteractable}");
         _snapController = GetComponent<BrickSnapController>();
+        //Debug.Log($"snapController: {_snapController}");
 
         _grabInteractable.selectEntered.AddListener(OnSelectEntered);
         _grabInteractable.selectExited.AddListener(OnSelectExited);

@@ -1,5 +1,9 @@
 using UnityEngine;
 using System.Collections;
+using UnityEngine.XR.Interaction.Toolkit;
+using UnityEngine.XR.Interaction.Toolkit.Interactables;
+
+// Script that makes bricks return to resource table f accidentally dropped on floor by participant.
 
 public class BrickReset : MonoBehaviour
 {

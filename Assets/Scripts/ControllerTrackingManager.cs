@@ -58,11 +58,10 @@ public class IndexControllerLogger : MonoBehaviour
         filePath = Path.Combine(logPath, fileName);
 
         writer = new StreamWriter(filePath);
-        writer.WriteLine("time,hand,pos_x,pos_y,pos_z,rot_x,rot_y,rot_z,rot_w," +
+        writer.WriteLine("raw_timestamp,relative_to_unix_epoch_timestamp,hand,pos_x,pos_y,pos_z,rot_x,rot_y,rot_z,rot_w," +
                          "vel_x,vel_y,vel_z,ang_vel_x,ang_vel_y,ang_vel_z," +
                          "trigger_pressed,grip_pressed,primary_button_pressed," +
-                         "joystick_x,joystick_y," +
-                         "thumb,index,middle,ring,pinky");
+                         "joystick_x,joystick_y,");
 
         logging = true;
         Debug.Log($"Controller logging started: {filePath}");
@@ -97,25 +96,22 @@ public class IndexControllerLogger : MonoBehaviour
         device.TryGetFeatureValue(CommonUsages.gripButton, out bool gripPressed);
         device.TryGetFeatureValue(CommonUsages.primaryButton, out bool primaryPressed);
         device.TryGetFeatureValue(CommonUsages.primary2DAxis, out Vector2 joystick);
+        
+        long rawTimestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        float relativeTimestamp = Time.time;
+        
 
-        float thumb = GetFeature(device, "ThumbCapacitiveTouch", CommonUsages.thumbTouch);
-        float index = GetFeature(device, "IndexFinger", new InputFeatureUsage<float>("indexFinger"));
-        float middle = GetFeature(device, "MiddleFinger", new InputFeatureUsage<float>("middleFinger"));
-        float ring = GetFeature(device, "RingFinger", new InputFeatureUsage<float>("ringFinger"));
-        float pinky = GetFeature(device, "PinkyFinger", new InputFeatureUsage<float>("pinkyFinger"));
-
-        string line = string.Format("{0:F4},{1},{2:F4},{3:F4},{4:F4},{5:F4},{6:F4},{7:F4},{8:F4}," +
-                                    "{9:F4},{10:F4},{11:F4},{12:F4},{13:F4},{14:F4}," +
-                                    "{15},{16},{17},{18:F4},{19:F4}," +
-                                    "{20:F4},{21:F4},{22:F4},{23:F4},{24:F4}",
-            Time.time, hand,
+        string line = string.Format("{0},{1},{2},{3},{4:F4},{5:F4},{6:F4},{7:F4},{8:F4},{9:F4}," +
+                                    "{10:F4},{11:F4},{12:F4},{13:F4},{14:F4},{15:F4}," +
+                                    "{16},{17},{18},{19:F4},{20:F4}",
+            rawTimestamp, relativeTimestamp,
+            hand,
             position.x, position.y, position.z,
             rotation.x, rotation.y, rotation.z, rotation.w,
             velocity.x, velocity.y, velocity.z,
             angularVelocity.x, angularVelocity.y, angularVelocity.z,
             triggerPressed, gripPressed, primaryPressed,
-            joystick.x, joystick.y,
-            thumb, index, middle, ring, pinky
+            joystick.x, joystick.y
         );
 
         writer.WriteLine(line);
