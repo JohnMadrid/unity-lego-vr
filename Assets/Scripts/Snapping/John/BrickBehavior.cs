@@ -1,0 +1,794 @@
+// BrickBehavior.cs
+using UnityEngine;
+using UnityEngine.XR.Interaction.Toolkit;
+using UnityEngine.XR.Interaction.Toolkit.Interactables;
+using System.Collections.Generic;
+using System.Collections;
+
+[RequireComponent(typeof(XRGrabInteractable), typeof(Rigidbody))]
+public class BrickBehavior : MonoBehaviour
+{
+    // ========================================
+    // CONSTANTS AND ENUMS
+    // ========================================
+    private enum BrickState
+    {
+        Idle,
+        Grabbing,
+        Snapping,
+        Snapped
+    }
+    
+    public enum DebugLevel
+    {
+        NoDebug,        // No debug messages
+        LiteDebug,      // Only crucial debug messages that help understand the flow
+        NormalDebug,    // All current log messages except the ones with DEBUG:
+        ExtensiveDebug  // All current log messages including the ones with DEBUG:
+    }
+
+    // ========================================
+    // SERIALIZED FIELDS
+    // ========================================
+    [Header("Snapping Properties")]
+    [Tooltip("How close two studs must be to be considered a valid connection (in meters). Lower values require more precision.")]
+    public float snapTolerance = 0.01f;
+
+    [Tooltip("How quickly the brick animates into its snapped position. Higher values = faster animation. Typical range: 5-50. Lower values prevent overshooting but may feel sluggish.")]
+    public float snapSpeed = 30f; // Increased from 8f for faster, more responsive snapping
+
+    [Tooltip("Maximum distance (in meters) for valid snap detection between studs. Higher values make snapping easier.")]
+    public float maxSnapDistance = 0.05f;
+
+    [Tooltip("Minimum distance (in meters) to start collision detection between studs. Higher values may improve responsiveness but reduce precision.")]
+    public float minCollisionDistance = 0.1f;
+
+    [Header("Group Operations")]
+    [Tooltip("Distance (in meters) within which two bricks/groups, each grabbed by a different controller, can join. Higher values make group joining easier.")]
+    public float groupJoinThreshold = 0.15f;
+
+    [Tooltip("Stricter distance (in meters) for joining any grabbed bricks. Used for more precise group joining.")]
+    public float groupJoinStrictThreshold = 0.1f;
+
+    [Tooltip("Distance (in meters) to separate groups after a split to prevent immediate re-snapping.")]
+    public float groupSplitSeparation = 0.2f;
+
+    [Header("Physics Properties")]
+    [Tooltip("Linear drag coefficient for the brick's rigidbody. Higher values make the brick more stable and less likely to slide.")]
+    public float brickDrag = 2.0f;
+
+    [Tooltip("Angular drag coefficient for the brick's rigidbody. Higher values make the brick more stable and less likely to rotate unexpectedly.")]
+    public float brickAngularDrag = 2.0f;
+
+    [Tooltip("Physics material for additional friction control. Create a material with high static friction (0.8-1.0) for better stability.")]
+    public PhysicsMaterial brickPhysicsMaterial;
+
+    [Header("Performance & Timing")]
+    [Tooltip("Cooldown (in seconds) to prevent repeated collision events between studs.")]
+    public float collisionCooldown = 0.1f;
+
+    [Tooltip("Delay (in seconds) after release before resetting the snap flag. Controls how long after release a snap can still occur.")]
+    public float releaseFlagDelay = 0.2f;
+
+    [Tooltip("The minimum number of stud/anti-stud pairs that must align for a snap to occur.")]
+    public int minRequiredConnections = 1;
+
+    [Header("Animation Tolerances")]
+    [Tooltip("Maximum allowed increase in position distance during snap animation (in meters). Lower values prevent overshooting but may slow animation.")]
+    public float positionTolerance = 0.001f; // 1mm
+
+    [Tooltip("Maximum allowed increase in rotation angle during snap animation (in degrees). Lower values prevent overshooting but may slow animation.")]
+    public float rotationTolerance = 0.2f; // 0.2°
+
+    [Tooltip("Final position accuracy required for snap completion (in meters). Must be greater than positionTolerance.")]
+    public float completionThreshold = 0.002f; // 2mm
+
+    [Tooltip("Final rotation accuracy required for snap completion (in degrees). Must be greater than rotationTolerance.")]
+    public float rotationThreshold = 0.5f; // 0.5°
+
+    [Header("Debug Settings")]
+    [Tooltip("Controls the level of debug output. NoDebug=no messages, LiteDebug=only crucial flow messages, NormalDebug=all except DEBUG:, ExtensiveDebug=all messages.")]
+    public DebugLevel debugLevel = DebugLevel.NormalDebug;
+
+    // ========================================
+    // PRIVATE FIELDS - COMPONENTS
+    // ========================================
+    private XRGrabInteractable grabInteractable;
+    private Rigidbody rb;
+    private Transform originalParent;
+
+    // ========================================
+    // PRIVATE FIELDS - STATE
+    // ========================================
+    public bool isSnapping = false;
+    private Vector3 targetSnapPosition;
+    private Quaternion targetSnapRotation;
+    private BrickBehavior snapTargetBrick;
+    private bool justReleased = false;
+    private BrickState currentState = BrickState.Idle;
+
+    // Snap immunity system to prevent re-snapping after splits
+    public float snapImmunityEndTime = 0f;
+    private const float SNAP_IMMUNITY_DURATION = 1.0f; // 1 second of immunity after split
+
+    // Potential snap storage system
+    private Stud potentialSnapStud = null;
+    private Stud potentialSnapTargetStud = null;
+    
+    // Store the last grab position to avoid XR Grab Interactable interference
+    private Vector3 lastGrabPosition;
+    private Quaternion lastGrabRotation;
+
+    // ========================================
+    // MANAGER REFERENCES
+    // ========================================
+    private BrickStudManager studManager;
+    private BrickSnappingSystem snappingSystem;
+    private BrickConnectionManager connectionManager;
+    private BrickPhysicsManager physicsManager;
+    private BrickGroupOperations groupOperations;
+
+    // ========================================
+    // PUBLIC PROPERTIES
+    // ========================================
+    public List<Stud> TopStuds => studManager?.TopStuds ?? new List<Stud>();
+    public List<Stud> BottomStuds => studManager?.BottomStuds ?? new List<Stud>();
+    public List<BrickBehavior> ConnectedNeighbors => connectionManager?.ConnectedNeighbors ?? new List<BrickBehavior>();
+    public FixedJoint Joint => connectionManager?.Joint;
+    public BrickBehavior MasterBrick => connectionManager?.MasterBrick ?? this;
+    public BrickBehavior OriginalMaster => connectionManager?.OriginalMaster ?? this;
+    public BrickConnectionManager ConnectionManager => connectionManager;
+
+    // ========================================
+    // DEBUG LOGGING HELPERS
+    // ========================================
+    
+    public void LogDebug(string message, bool isExtensiveDebug = false)
+    {
+        if (debugLevel == DebugLevel.NoDebug) return;
+        
+        // Check if message contains "DEBUG:" - these should only be logged in ExtensiveDebug mode
+        bool containsDebug = message.Contains("DEBUG:");
+        
+        // Determine if this message should be logged based on debug level and content
+        bool shouldLog = false;
+        
+        switch (debugLevel)
+        {
+            case DebugLevel.LiteDebug:
+                // Only log non-DEBUG messages that aren't extensive
+                shouldLog = !containsDebug && !isExtensiveDebug;
+                break;
+                
+            case DebugLevel.NormalDebug:
+                // Log non-DEBUG messages, but DEBUG messages only if extensive debug is enabled
+                shouldLog = !containsDebug || (containsDebug && isExtensiveDebug);
+                break;
+                
+            case DebugLevel.ExtensiveDebug:
+                // Log everything
+                shouldLog = true;
+                break;
+        }
+        
+        if (shouldLog)
+        {
+            // Remove double spaces and trim leading/trailing spaces
+            Debug.Log($"[{name}] {message.Trim()}");
+        }
+    }
+    
+    public void LogWarning(string message, bool isExtensiveDebug = false)
+    {
+        if (debugLevel == DebugLevel.NoDebug) return;
+        
+        // Check if message contains "DEBUG:" - these should only be logged in ExtensiveDebug mode
+        bool containsDebug = message.Contains("DEBUG:");
+        
+        // Determine if this message should be logged based on debug level and content
+        bool shouldLog = false;
+        
+        switch (debugLevel)
+        {
+            case DebugLevel.LiteDebug:
+                // Only log non-DEBUG messages that aren't extensive
+                shouldLog = !containsDebug && !isExtensiveDebug;
+                break;
+                
+            case DebugLevel.NormalDebug:
+                // Log non-DEBUG messages, but DEBUG messages only if extensive debug is enabled
+                shouldLog = !containsDebug || (containsDebug && isExtensiveDebug);
+                break;
+                
+            case DebugLevel.ExtensiveDebug:
+                // Log everything
+                shouldLog = true;
+                break;
+        }
+        
+        if (shouldLog)
+        {
+            // Remove double spaces and trim leading/trailing spaces
+            Debug.LogWarning($"[{name}] {message.Trim()}");
+        }
+    }
+
+    // ========================================
+    // PUBLIC METHODS
+    // ========================================
+
+    // Public method for studs to check if the brick is in a snappable state.
+    public bool IsReadyForSnap()
+    {
+        // Check if we're in snap immunity period (after a split)
+        if (Time.time < snapImmunityEndTime)
+        {
+            LogDebug($"IsReadyForSnap() - In snap immunity period, cannot snap until {snapImmunityEndTime:F2}", true);
+            return false;
+        }
+
+        // Allow snapping if:
+        // 1. Just released (original logic)
+        // 2. Currently grabbing (allow snapping while holding)
+        // 3. Idle state (allow snapping for free-floating bricks)
+        bool canSnap = justReleased ||
+                       currentState == BrickState.Grabbing ||
+                       currentState == BrickState.Idle;
+
+        LogDebug($"IsReadyForSnap() - justReleased={justReleased}, currentState={currentState}, canSnap={canSnap}", true);
+        return canSnap;
+    }
+
+    // Debug method to check brick state
+    [ContextMenu("Check Brick State")]
+    public void CheckBrickState()
+    {
+        LogDebug($"CheckBrickState() - Current state: {currentState}");
+        LogDebug($"CheckBrickState() - justReleased: {justReleased}", true);
+        LogDebug($"CheckBrickState() - isSnapping: {isSnapping}", true);
+        LogDebug($"CheckBrickState() - IsReadyForSnap: {IsReadyForSnap()}", true);
+        LogDebug($"CheckBrickState() - Connected neighbors: {ConnectedNeighbors.Count}", true);
+        LogDebug($"CheckBrickState() - Master brick: {MasterBrick?.name ?? "null"}", true);
+        LogDebug($"CheckBrickState() - Potential snap: {potentialSnapStud?.name ?? "null"} to {potentialSnapTargetStud?.name ?? "null"}", true);
+    }
+
+    // Public method to manually strengthen all connections in a structure
+    [ContextMenu("Strengthen Structure")]
+    public void StrengthenStructure()
+    {
+        LogDebug("StrengthenStructure() - Manually strengthening structure");
+        connectionManager?.StrengthenGroupConnections();
+        physicsManager?.StabilizeGroup();
+    }
+
+    // ========================================
+    // UNITY LIFECYCLE
+    // ========================================
+
+    void Awake()
+    {
+        LogDebug("Awake() - Initializing BrickBehavior");
+
+        // Get required components
+        grabInteractable = GetComponent<XRGrabInteractable>();
+        rb = GetComponent<Rigidbody>();
+        originalParent = transform.parent;
+
+        LogDebug($"Awake() - Components acquired: XRGrabInteractable={grabInteractable != null}, Rigidbody={rb != null}, OriginalParent={originalParent?.name ?? "null"}", true);
+
+        // Apply physics material for better friction if assigned
+        if (brickPhysicsMaterial != null)
+        {
+            var collider = GetComponent<Collider>();
+            if (collider != null)
+            {
+                collider.material = brickPhysicsMaterial;
+                LogDebug($"Awake() - Applied physics material: {brickPhysicsMaterial.name}", true);
+            }
+        }
+
+        // Initialize managers
+        InitializeManagers();
+
+        // Set up event listeners
+        grabInteractable.selectEntered.AddListener(OnGrabStarted);
+        grabInteractable.selectExited.AddListener(OnGrabReleased);
+
+        LogDebug("Awake() - Event listeners attached", true);
+
+        // Validate initial physics state
+        physicsManager?.ValidatePhysicsState();
+        
+        LogDebug("Awake() - Initialization complete");
+    }
+
+    void Update()
+    {
+        // Periodically check for group joining opportunities when grabbed
+        if (grabInteractable.isSelected && currentState == BrickState.Grabbing)
+        {
+            // Check every 10 frames (about 6 times per second at 60fps)
+            if (Time.frameCount % 10 == 0)
+            {
+                groupOperations?.CheckForGroupJoiningOpportunities();
+            }
+        }
+    }
+    
+    void FixedUpdate()
+    {
+        if (isSnapping && currentState == BrickState.Snapping)
+        {
+            // ========================================
+            // PHYSICS SAFEGUARD DURING SNAP ANIMATION
+            // ========================================
+            // Ensure physics remains disabled during the entire snap animation
+            // This prevents any physics forces from interfering with the lerp movement
+            if (rb != null && (rb.isKinematic == false || rb.useGravity == true))
+            {
+                LogWarning($"FixedUpdate() - WARNING: Physics was re-enabled during snap animation! Force disabling again.");
+                rb.isKinematic = true;
+                rb.useGravity = false;
+            }
+            
+            // ========================================
+            // ANIMATION TOLERANCE DEFINITIONS
+            // ========================================
+            // These tolerances define how much the animation is allowed to diverge from the target
+            // before the safeguard stops applying the lerp changes.
+            // 
+            // RELATIONSHIP: Safeguard tolerances must be SMALLER than completion thresholds
+            // This ensures the animation can't get stuck too far from the target to ever complete.
+            // - positionTolerance < completionThreshold ✅
+            // - rotationTolerance < rotationThreshold ✅
+            //
+            // Position: Safeguard allows positionTolerance increase, completion requires within completionThreshold
+            // Rotation: Safeguard allows rotationTolerance increase, completion requires within rotationThreshold
+            
+            // Store initial distances for comparison
+            float initialPositionDistance = Vector3.Distance(transform.position, targetSnapPosition);
+            float initialRotationDistance = Quaternion.Angle(transform.rotation, targetSnapRotation);
+            
+            // Smooth snap animation using lerp/slerp with fixed timestep
+            // This provides more consistent timing than variable frame rate
+            float snapSpeed = this.snapSpeed; // Use the serialized snapSpeed property
+            
+            // Adjust for fixed timestep - Time.fixedDeltaTime is typically 0.02 (50fps)
+            // This provides more controlled animation speed
+            float lerpFactor = Mathf.Clamp01(snapSpeed * Time.fixedDeltaTime);
+            
+            // ADAPTIVE LERP: Reduce lerp factor when close to target to prevent overshooting
+            float distanceToTarget = Vector3.Distance(transform.position, targetSnapPosition);
+            if (distanceToTarget < 0.01f) // Within 1cm of target
+            {
+                // Use much smaller lerp factor when very close to prevent overshooting
+                lerpFactor *= 0.3f; // Reduce to 30% of normal speed
+            }
+            else if (distanceToTarget < 0.05f) // Within 5cm of target
+            {
+                // Use reduced lerp factor when moderately close
+                lerpFactor *= 0.6f; // Reduce to 60% of normal speed
+            }
+            
+            // Calculate new position and rotation
+            Vector3 newPosition = Vector3.Lerp(transform.position, targetSnapPosition, lerpFactor);
+            Quaternion newRotation = Quaternion.Slerp(transform.rotation, targetSnapRotation, lerpFactor);
+            
+            // SAFEGUARD: Only apply changes if they don't significantly move us away from the target
+            float newPositionDistance = Vector3.Distance(newPosition, targetSnapPosition);
+            float newRotationDistance = Quaternion.Angle(newRotation, targetSnapRotation);
+            
+            if (newPositionDistance <= initialPositionDistance + positionTolerance)
+            {
+                transform.position = newPosition;
+            }
+            else
+            {
+                LogWarning($"FixedUpdate() - WARNING: Position animation diverging significantly! Old distance: {initialPositionDistance:F6}, New distance: {newPositionDistance:F6}");
+            }
+            
+            if (newRotationDistance <= initialRotationDistance + rotationTolerance)
+            {
+                transform.rotation = newRotation;
+            }
+            else
+            {
+                LogWarning($"FixedUpdate() - WARNING: Rotation animation diverging significantly! Old distance: {initialRotationDistance:F2}, New distance: {newRotationDistance:F2}");
+            }
+            
+            // Check if we're close enough to consider the snap complete
+            float positionDistance = Vector3.Distance(transform.position, targetSnapPosition);
+            float rotationDistance = Quaternion.Angle(transform.rotation, targetSnapRotation);
+            
+            // Add debug logging every 10 frames to track progress
+            if (Time.frameCount % 10 == 0)
+            {
+                LogDebug($"FixedUpdate() - Snap progress - Position distance: {positionDistance:F6}, Rotation distance: {rotationDistance:F2}, Thresholds: {completionThreshold:F6}, {rotationThreshold:F2}");
+                LogDebug($"FixedUpdate() - DEBUG: Adaptive lerp - Distance to target: {distanceToTarget:F6}, Lerp factor: {lerpFactor:F3}", false);
+            }
+            
+            if (positionDistance < completionThreshold && rotationDistance < rotationThreshold) // Within 2mm and 0.1 degrees
+            {
+                LogDebug($"FixedUpdate() - Snap animation complete - position: {transform.position}, rotation: {transform.rotation.eulerAngles}");
+                LogDebug($"FixedUpdate() - Final distance to target: {positionDistance:F6}, threshold: {completionThreshold}");
+                LogDebug($"FixedUpdate() - Final rotation difference: {rotationDistance:F2}°, threshold: {rotationThreshold:F2}°");
+                
+                // Snap to exact target to ensure perfect alignment
+                transform.position = targetSnapPosition;
+                transform.rotation = targetSnapRotation;
+                
+                // Finalize the snap
+                snappingSystem?.FinalizeSnap();
+            }
+        }
+    }
+    
+    void LateUpdate()
+    {
+        // Update the last grab position continuously while grabbing
+        // This ensures we have the most recent position before XR Grab Interactable modifies it
+        if (currentState == BrickState.Grabbing && grabInteractable.isSelected)
+        {
+            lastGrabPosition = transform.position;
+            lastGrabRotation = transform.rotation;
+        }
+    }
+
+    void OnDestroy()
+    {
+        LogDebug("OnDestroy() - Cleaning up BrickBehavior");
+        
+        // Remove event listeners
+        if (grabInteractable != null)
+        {
+            grabInteractable.selectEntered.RemoveListener(OnGrabStarted);
+            grabInteractable.selectExited.RemoveListener(OnGrabReleased);
+            LogDebug("OnDestroy() - Event listeners removed", true);
+        }
+        
+        // Clean up managers
+        studManager?.Cleanup();
+        snappingSystem?.Cleanup();
+        connectionManager?.Cleanup();
+        physicsManager?.Cleanup();
+        groupOperations?.Cleanup();
+        
+        LogDebug("OnDestroy() - Cleanup complete");
+    }
+
+    // ========================================
+    // PRIVATE METHODS
+    // ========================================
+    
+    private void InitializeManagers()
+    {
+        studManager = new BrickStudManager(this);
+        snappingSystem = new BrickSnappingSystem(this, studManager);
+        connectionManager = new BrickConnectionManager(this);
+        physicsManager = new BrickPhysicsManager(this);
+        groupOperations = new BrickGroupOperations(this);
+        
+        LogDebug("InitializeManagers() - All managers initialized", true);
+    }
+
+    private void OnGrabStarted(SelectEnterEventArgs args)
+    {
+        LogDebug($"OnGrabStarted() - Brick grabbed, previous state: {currentState}");
+        
+        // Get the interactor that grabbed this brick
+        UnityEngine.XR.Interaction.Toolkit.Interactors.IXRSelectInteractor interactor = args.interactorObject;
+        if (interactor == null)
+        {
+            LogWarning("OnGrabStarted() - WARNING: Interactor is null");
+            return;
+        }
+        
+        LogDebug($"OnGrabStarted() - DEBUG: Grabbed by interactor: {interactor.transform.name}", false);
+
+        // Check if this brick is already being grabbed by a different interactor
+        if (grabInteractable.isSelected && grabInteractable.firstInteractorSelecting != interactor)
+        {
+            LogWarning($"OnGrabStarted() - WARNING: Brick already grabbed by different interactor: {grabInteractable.firstInteractorSelecting?.transform.name}");
+            return;
+        }
+
+        // IMPORTANT: Check if this brick is part of a connected group
+        if (ConnectedNeighbors.Count > 0)
+        {
+            LogDebug($"OnGrabStarted() - Brick is part of connected group with {ConnectedNeighbors.Count} neighbors");
+            
+            // Find all bricks in the connected group
+            List<BrickBehavior> allGroupBricks = new List<BrickBehavior>();
+            BrickGroupUtils.FindAllConnectedInGroup(this, allGroupBricks, name);
+            LogDebug($"OnGrabStarted() - DEBUG: Found {allGroupBricks.Count} total bricks in group", false);
+            
+            // Check if any other brick in the group is already being grabbed by a different interactor
+            bool hasOtherGrabbedBrick = false;
+            UnityEngine.XR.Interaction.Toolkit.Interactors.IXRSelectInteractor otherInteractor = null;
+            
+            foreach (var groupBrick in allGroupBricks)
+            {
+                if (groupBrick != this && groupBrick.GetComponent<UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable>().isSelected)
+                {
+                    hasOtherGrabbedBrick = true;
+                    otherInteractor = groupBrick.GetComponent<UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable>().firstInteractorSelecting;
+                    LogDebug($"OnGrabStarted() - DEBUG: Found other grabbed brick in group: {groupBrick.name} by interactor: {otherInteractor?.transform.name}", false);
+                    break;
+                }
+            }
+            
+            // If another brick in the group is grabbed by a different interactor, allow this grab (multi-controller scenario)
+            if (hasOtherGrabbedBrick && otherInteractor != interactor)
+            {
+                LogDebug("OnGrabStarted() - Multi-controller scenario detected - allowing grab for group manipulation");
+            }
+            // If another brick is grabbed by the same interactor, prevent duplicate grabs
+            else if (hasOtherGrabbedBrick && otherInteractor == interactor)
+            {
+                LogWarning($"OnGrabStarted() - WARNING: Same interactor already grabbing another brick in group - preventing duplicate grab");
+                
+                // Force release the grab
+                grabInteractable.interactionManager.CancelInteractableSelection((UnityEngine.XR.Interaction.Toolkit.Interactables.IXRSelectInteractable)grabInteractable);
+                return;
+            }
+            // If no other brick is grabbed, allow single-hand grab of the group
+            else
+            {
+                LogDebug("OnGrabStarted() - DEBUG: Single-hand grab of connected group allowed - no other bricks currently grabbed", false);
+            }
+        }
+        else
+        {
+            LogDebug("OnGrabStarted() - DEBUG: Brick is standalone - allowing grab", false);
+        }
+
+        // Clear any stored potential snap when grabbing starts
+        ClearPotentialSnap();
+
+        // Handle grab logic through managers
+        connectionManager?.OnGrabStarted(interactor);
+        physicsManager?.OnGrabStarted();
+
+        currentState = BrickState.Grabbing;
+        isSnapping = false;
+        
+        // Store the initial grab position for potential snap calculations
+        lastGrabPosition = transform.position;
+        lastGrabRotation = transform.rotation;
+        LogDebug($"OnGrabStarted() - DEBUG: Stored initial grab position: {lastGrabPosition}, rotation: {lastGrabRotation.eulerAngles}", false);
+        
+        LogDebug($"OnGrabStarted() - State updated to: {currentState}");
+
+        // Check for unsnap conditions
+        groupOperations?.CheckForUnsnapConditions(interactor);
+    }
+
+    private void OnGrabReleased(SelectExitEventArgs args)
+    {
+        LogDebug($"OnGrabReleased() - Brick released, current state: {currentState}");
+        
+        if (currentState == BrickState.Grabbing)
+        {
+            // IMPORTANT: Use the last known grab position instead of current position
+            // This avoids issues with XR Grab Interactable modifying the position during release
+            Vector3 releasePosition = lastGrabPosition;
+            Quaternion releaseRotation = lastGrabRotation;
+            LogDebug($"OnGrabReleased() - DEBUG: Using last grab position: {releasePosition}, rotation: {releaseRotation.eulerAngles}", false);
+            
+            justReleased = true;
+            LogDebug("OnGrabReleased() - Set justReleased flag to true");
+        
+            // Reset the flag after a short delay to prevent accidental snaps later
+            Invoke(nameof(ResetReleaseFlag), releaseFlagDelay);
+            LogDebug($"OnGrabReleased() - DEBUG: Scheduled ResetReleaseFlag in {releaseFlagDelay} seconds", false);
+
+            // Execute any stored potential snap with the captured release position
+            ExecuteStoredSnap(releasePosition, releaseRotation);
+
+            // Handle release logic through managers (but delay physics until snap is complete)
+            connectionManager?.OnGrabReleased();
+            
+            // Delay physics manager call to avoid conflicts during snap animation
+            StartCoroutine(DelayedPhysicsManagerCall());
+        }
+        else
+        {
+            LogDebug("OnGrabReleased() - DEBUG: Ignored release (not in Grabbing state)", false);
+        }
+    }
+
+    // Resets the flag so that snapping can only be initiated immediately after release.
+    private void ResetReleaseFlag()
+    {
+        LogDebug("ResetReleaseFlag() - Resetting justReleased flag");
+        justReleased = false;
+    
+        // If a snap hasn't started by now, we go back to being idle
+        if (currentState != BrickState.Snapping && currentState != BrickState.Snapped)
+        {
+            currentState = BrickState.Idle;
+            LogDebug($"ResetReleaseFlag() - State reset to: {currentState}");
+        }
+        else
+        {
+            LogDebug($"ResetReleaseFlag() - DEBUG: State unchanged: {currentState}", false);
+        }
+    }
+
+    // Method to store a potential snap connection (called during collision detection)
+    public void StorePotentialSnap(Stud ourStud, Stud targetStud)
+    {
+        LogDebug($"StorePotentialSnap() - Storing potential snap from {ourStud.name} to {targetStud.name}");
+        
+        // Check if this is a potential group joining scenario
+        groupOperations?.CheckForGroupJoiningDuringCollision(ourStud, targetStud);
+        
+        // Only store if we don't already have a potential snap
+        if (potentialSnapStud == null)
+        {
+            potentialSnapStud = ourStud;
+            potentialSnapTargetStud = targetStud;
+            LogDebug("StorePotentialSnap() - DEBUG: Potential snap stored", false);
+        }
+        else
+        {
+            LogDebug("StorePotentialSnap() - DEBUG: Already have a potential snap, ignoring new one", false);
+        }
+    }
+
+    // Method to execute the stored potential snap (called after release)
+    private void ExecuteStoredSnap(Vector3 releasePosition, Quaternion releaseRotation)
+    {
+        if (potentialSnapStud != null && potentialSnapTargetStud != null)
+        {
+            LogDebug($"ExecuteStoredSnap() - Executing stored snap from {potentialSnapStud.name} to {potentialSnapTargetStud.name}");
+            LogDebug($"ExecuteStoredSnap() - DEBUG: Using release position: {releasePosition}, rotation: {releaseRotation.eulerAngles}", false);
+            
+            // IMPORTANT: Restore the brick to its release position before calculating snap
+            transform.position = releasePosition;
+            transform.rotation = releaseRotation;
+            LogDebug($"ExecuteStoredSnap() - DEBUG: Restored brick to release position: {transform.position}", false);
+            
+            // Temporarily disable collision detection on all studs to prevent multiple collisions during snap
+            studManager?.DisableStudCollisions();
+            
+            // Execute the actual snap
+            snappingSystem?.RequestSnap(potentialSnapStud, potentialSnapTargetStud);
+            
+            // Clear the stored snap
+            potentialSnapStud = null;
+            potentialSnapTargetStud = null;
+        }
+    }
+
+    // Method to clear stored potential snap
+    private void ClearPotentialSnap()
+    {
+        // Clear stored snap references
+        potentialSnapStud = null;
+        potentialSnapTargetStud = null;
+        
+        // Reset all stud states to idle
+        foreach (var stud in TopStuds)
+        {
+            stud.ClearSnapRangeState();
+        }
+        foreach (var stud in BottomStuds)
+        {
+            stud.ClearSnapRangeState();
+        }
+        
+        LogDebug("ClearPotentialSnap() - DEBUG: Cleared potential snap and reset stud states", false);
+    }
+
+    // ========================================
+    // PUBLIC INTERFACE FOR MANAGERS
+    // ========================================
+    
+    public void SetSnappingState(bool snapping, Vector3 targetPos, Quaternion targetRot, BrickBehavior targetBrick)
+    {
+        LogDebug($"SetSnappingState() - DEBUG: Setting isSnapping from {isSnapping} to {snapping}", false);
+        isSnapping = snapping;
+        targetSnapPosition = targetPos;
+        targetSnapRotation = targetRot;
+        snapTargetBrick = targetBrick;
+        currentState = snapping ? BrickState.Snapping : BrickState.Idle;
+        LogDebug($"SetSnappingState() - DEBUG: State changed to {currentState}", false);
+    }
+
+    public void ActivateSnapImmunity()
+    {
+        snapImmunityEndTime = Time.time + SNAP_IMMUNITY_DURATION;
+        LogDebug($"ActivateSnapImmunity() - DEBUG: Snap immunity activated until {snapImmunityEndTime:F2}", false);
+    }
+
+    public void EnableStudCollisions()
+    {
+        studManager?.EnableStudCollisions();
+    }
+
+    public void UpdateMaster(BrickBehavior newMaster)
+    {
+        connectionManager?.UpdateMaster(newMaster);
+    }
+
+    public void RemoveNeighbor(BrickBehavior neighbor)
+    {
+        connectionManager?.RemoveNeighbor(neighbor);
+    }
+
+    public void SetJoint(FixedJoint joint)
+    {
+        connectionManager?.SetJoint(joint);
+    }
+
+    public static bool AreBricksInSameGroup(BrickBehavior brick1, BrickBehavior brick2)
+    {
+        return BrickGroupUtils.AreBricksInSameGroup(brick1, brick2);
+    }
+
+    // Coroutine to delay physics manager call until snap animation is complete
+    private System.Collections.IEnumerator DelayedPhysicsManagerCall()
+    {
+        LogDebug("DelayedPhysicsManagerCall() - Starting delayed physics manager call");
+        LogDebug($"DelayedPhysicsManagerCall() - DEBUG: Initial isSnapping state: {isSnapping}", false);
+        
+        // Wait for snap animation to complete with timeout
+        int waitCount = 0;
+        const int MAX_WAIT_FRAMES = 60; // 1 second at 60fps
+        
+        while (isSnapping && waitCount < MAX_WAIT_FRAMES)
+        {
+            waitCount++;
+            if (waitCount % 20 == 0) // Log every 20 frames (about 0.3 seconds at 60fps)
+            {
+                LogDebug($"DelayedPhysicsManagerCall() - DEBUG: Still waiting for snap to complete, frame {waitCount}, isSnapping: {isSnapping}", false);
+            }
+            yield return null;
+        }
+        
+        if (waitCount >= MAX_WAIT_FRAMES)
+        {
+            LogWarning($"DelayedPhysicsManagerCall() - WARNING: Timeout reached! Force completing snap after {waitCount} frames");
+            // Force complete the snap only if we have a valid snap system
+            if (snappingSystem != null)
+            {
+                isSnapping = false;
+                currentState = BrickState.Idle;
+                snappingSystem.FinalizeSnap();
+            }
+            else
+            {
+                LogWarning("DelayedPhysicsManagerCall() - WARNING: Snap system is null, cannot force finalize");
+                isSnapping = false;
+                currentState = BrickState.Idle;
+            }
+        }
+        
+        LogDebug($"DelayedPhysicsManagerCall() - DEBUG: Waited {waitCount} frames for snap to complete", false);
+        
+        // Now call physics manager after snap is complete
+        LogDebug("DelayedPhysicsManagerCall() - Snap animation complete, calling physics manager");
+        
+        var rb = GetComponent<Rigidbody>();
+        if (rb != null)
+        {
+            LogDebug($"DelayedPhysicsManagerCall() - DEBUG: Physics before calling manager - isKinematic: {rb.isKinematic}, useGravity: {rb.useGravity}, velocity: {rb.linearVelocity}", false);
+        }
+        
+        physicsManager?.OnGrabReleased();
+        
+        // IMPORTANT: Force restore physics if the brick is not actually grabbed but still has kinematic physics
+        if (rb != null && !grabInteractable.isSelected && rb.isKinematic)
+        {
+            LogWarning("DelayedPhysicsManagerCall() - WARNING: Brick appears to be kinematic but not grabbed! Force restoring physics.");
+            rb.isKinematic = false;
+            rb.useGravity = true;
+        }
+        
+        if (rb != null)
+        {
+            LogDebug($"DelayedPhysicsManagerCall() - DEBUG: Physics after calling manager - isKinematic: {rb.isKinematic}, useGravity: {rb.useGravity}, velocity: {rb.linearVelocity}", false);
+        }
+    }
+} 

@@ -1,0 +1,134 @@
+{
+    "name": "UlitimateTracker",
+    "maps": [
+        {
+            "name": "UltimateTracker",
+            "id": "bcbec002-2c31-4b5c-aef7-8f43fbfab2e2",
+            "actions": [
+                {
+                    "name": "WaistTracker_Position",
+                    "type": "Value",
+                    "id": "6ff103a1-d9ed-4424-aeee-d4707b209b80",
+                    "expectedControlType": "Vector3",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": true
+                },
+                {
+                    "name": "WaistTracker_Rotation",
+                    "type": "Value",
+                    "id": "41015d53-a844-49f5-a76b-9d3e2385c662",
+                    "expectedControlType": "Quaternion",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": true
+                },
+                {
+                    "name": "LeftFootTracker_Position",
+                    "type": "Value",
+                    "id": "a9c3cda2-05a0-4e52-860a-a6e271863d2e",
+                    "expectedControlType": "Vector3",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": true
+                },
+                {
+                    "name": "LeftFootTracker_Rotation",
+                    "type": "Value",
+                    "id": "5f925519-4655-4965-9266-92c08543744e",
+                    "expectedControlType": "Quaternion",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": true
+                },
+                {
+                    "name": "RightFootTracker_Position",
+                    "type": "Value",
+                    "id": "6f1c3cfd-7b13-4087-b930-30b6e16a2a28",
+                    "expectedControlType": "Vector3",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": true
+                },
+                {
+                    "name": "RightFootTracker_Rotation",
+                    "type": "Value",
+                    "id": "5923484b-d08c-423f-ad32-3918d9bd9415",
+                    "expectedControlType": "Quaternion",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": true
+                }
+            ],
+            "bindings": [
+                {
+                    "name": "",
+                    "id": "ddeeed5a-2fd5-48e8-af16-34d7a9a81aaa",
+                    "path": "<XRViveTracker>{Waist}/devicePosition",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "WaistTracker_Position",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "57a15400-c053-40cc-add5-a16fe33d937e",
+                    "path": "<XRViveTracker>{Waist}/deviceRotation",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "WaistTracker_Rotation",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "f6da3aa3-dc8d-4def-8ab7-1872cf119a77",
+                    "path": "<XRViveTracker>{Left Foot}/devicePosition",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "LeftFootTracker_Position",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "51afb340-0795-45c2-9c76-360b2f511763",
+                    "path": "<XRViveTracker>{Left Foot}/deviceRotation",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "LeftFootTracker_Rotation",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "8b973f17-3ad7-44af-ade6-14d99bdb1970",
+                    "path": "<XRViveTracker>{Right Foot}/devicePosition",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "RightFootTracker_Position",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "d8f6aa50-25c4-45a4-9a44-8e8d95353b1d",
+                    "path": "<XRViveTracker>{Right Foot}/deviceRotation",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "RightFootTracker_Rotation",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                }
+            ]
+        }
+    ],
+    "controlSchemes": []
+}
