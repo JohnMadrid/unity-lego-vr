@@ -154,19 +154,29 @@ public class BrickSnappingSystem
         }
 
         // Disable physics during snap for both bricks to prevent interference
-        if (brick.GetComponent<Rigidbody>() != null)
+        // BUT only for non-board bricks
+        if (!brick.IsBoard && brick.GetComponent<Rigidbody>() != null)
         {
             brick.GetComponent<Rigidbody>().isKinematic = true;
             brick.GetComponent<Rigidbody>().useGravity = false;
             brick.LogDebug($"RequestSnap() - Disabled physics for snap animation", true);
         }
+        else if (brick.IsBoard)
+        {
+            brick.LogDebug($"RequestSnap() - Skipping physics change for board during snap", true);
+        }
         
         // IMPORTANT: Also disable physics on target brick to prevent it from moving during snap
-        if (targetBrick.GetComponent<Rigidbody>() != null)
+        // BUT only for non-board bricks
+        if (!targetBrick.IsBoard && targetBrick.GetComponent<Rigidbody>() != null)
         {
             targetBrick.GetComponent<Rigidbody>().isKinematic = true;
             targetBrick.GetComponent<Rigidbody>().useGravity = false;
             brick.LogDebug($"RequestSnap() - Disabled physics on target brick to prevent interference", true);
+        }
+        else if (targetBrick.IsBoard)
+        {
+            brick.LogDebug($"RequestSnap() - Skipping physics change for target board during snap", true);
         }
 
         // Set snapping state
@@ -323,7 +333,7 @@ public class BrickSnappingSystem
         // Add a crucial flow message for Lite Debug level
         brick.LogDebug($"CalculateSnapTransform() - Snap transform calculated successfully");
     }
-
+    
 
     // Method to align the released brick's local X-Y plane to the target brick's local X-Y plane
     private Quaternion AlignXYPlanes(Quaternion releasedBrickRotation, BrickBehavior targetBrick)
@@ -444,7 +454,7 @@ public class BrickSnappingSystem
         Quaternion closestRotation = options[minIndex];
         brick.LogDebug($"FindClosest90DegreeIncrement() - Selected {labels[minIndex]} with angle: {angles[minIndex]:F1}°", true);
         brick.LogDebug($"FindClosest90DegreeIncrement() - Final closest rotation: {closestRotation.eulerAngles}", true);
-
+        
         return closestRotation;
     }
 
@@ -493,9 +503,13 @@ public class BrickSnappingSystem
         }
 
         // Determine the ultimate master of the target brick's group
-        BrickBehavior targetMaster = targetBrick.MasterBrick;
+        // BUT if the target is a board, we don't want to join its group
+        BrickBehavior targetMaster = targetBrick.IsBoard ? brick : targetBrick.MasterBrick;
 
         // Create a Fixed Joint to connect this brick to the target
+        // BUT don't create joints when snapping to boards
+        if (!targetBrick.IsBoard)
+        {
         FixedJoint joint = brick.gameObject.AddComponent<FixedJoint>();
         joint.connectedBody = targetBrick.GetComponent<Rigidbody>();
         joint.breakForce = float.PositiveInfinity;
@@ -511,10 +525,16 @@ public class BrickSnappingSystem
         
         // IMPORTANT: Store the joint in the connection manager for proper group tracking
         brick.SetJoint(joint);
-        brick.LogDebug($" FinalizeSnap() - Stored joint in connection manager: {joint} connecting to {targetBrick.name}");
+            brick.LogDebug($" FinalizeSnap() - Stored joint in connection manager: {joint} connecting to {targetBrick.name}");
+        }
+        else
+        {
+            brick.LogDebug($" FinalizeSnap() - Skipping joint creation for board {targetBrick.name}");
+        }
         
         // Set mass properties to make the connection more rigid
-        if (brick.GetComponent<Rigidbody>() != null)
+        // BUT only for non-board bricks
+        if (!brick.IsBoard && brick.GetComponent<Rigidbody>() != null)
         {
             var brickRb = brick.GetComponent<Rigidbody>();
             brick.LogDebug($" FinalizeSnap() - DEBUG: Physics before joint creation - isKinematic: {brickRb.isKinematic}, useGravity: {brickRb.useGravity}", false);
@@ -531,9 +551,14 @@ public class BrickSnappingSystem
             brick.LogDebug($" FinalizeSnap() - Restored physics: isKinematic=false, useGravity=true");
             brick.LogDebug($" FinalizeSnap() - DEBUG: Physics after restoration - isKinematic: {brickRb.isKinematic}, useGravity: {brickRb.useGravity}, mass: {brickRb.mass}", false);
         }
+        else if (brick.IsBoard)
+        {
+            brick.LogDebug($" FinalizeSnap() - Skipping physics restoration for board", true);
+        }
         
     // IMPORTANT: Also restore physics on target brick
-        if (targetBrick.GetComponent<Rigidbody>() != null)
+    // BUT only for non-board bricks
+        if (!targetBrick.IsBoard && targetBrick.GetComponent<Rigidbody>() != null)
         {
         var targetRb = targetBrick.GetComponent<Rigidbody>();
         targetRb.isKinematic = false;
@@ -543,13 +568,33 @@ public class BrickSnappingSystem
         targetRb.angularDamping = brick.brickAngularDrag;
         brick.LogDebug($" FinalizeSnap() - Restored physics on target brick: isKinematic=false, useGravity=true");
         }
+        else if (targetBrick.IsBoard)
+        {
+            brick.LogDebug($" FinalizeSnap() - Skipping physics restoration for target board", true);
+        }
 
-        // This brick is no longer its own master. It's now a "slave" to the other group
+        // Update master and connection graph
+        if (targetBrick.IsBoard)
+        {
+            // When snapping to a board, the brick remains its own master
+            // and the board doesn't join the group
+            brick.UpdateMaster(brick);
+            brick.LogDebug($" FinalizeSnap() - Brick remains its own master when snapping to board");
+            
+            // Only add the board as a neighbor to the brick, not vice versa
+            brick.ConnectedNeighbors.Add(targetBrick);
+            brick.LogDebug($" FinalizeSnap() - Added board {targetBrick.name} as neighbor to brick {brick.name}");
+        }
+        else
+        {
+            // Normal brick-to-brick snapping - join the target's group
         brick.UpdateMaster(targetMaster);
+            brick.LogDebug($" FinalizeSnap() - Brick joined target's group, new master: {targetMaster.name}");
 
         // Update the logical connection graph
         brick.ConnectedNeighbors.Add(targetBrick);
         targetBrick.ConnectedNeighbors.Add(brick);
+        }
 
         // Clear the reference
         snapTargetBrick = null;
@@ -563,11 +608,16 @@ public class BrickSnappingSystem
         brick.LogDebug($"FinalizeSnap() - DEBUG: FORCED brick to exact target rotation: {targetSnapRotation.eulerAngles}", false);
 
         // Clear any residual velocities to prevent oscillation
-        if (brick.GetComponent<Rigidbody>() != null)
+        // BUT only for non-board bricks
+        if (!brick.IsBoard && brick.GetComponent<Rigidbody>() != null)
         {
             brick.GetComponent<Rigidbody>().linearVelocity = Vector3.zero;
             brick.GetComponent<Rigidbody>().angularVelocity = Vector3.zero;
             brick.LogDebug($" FinalizeSnap() - Cleared velocities to prevent oscillation");
+        }
+        else if (brick.IsBoard)
+        {
+            brick.LogDebug($" FinalizeSnap() - Skipping velocity clearing for board", true);
         }
         
         // IMPORTANT: Don't call physics managers during snap finalization
@@ -743,6 +793,25 @@ public class BrickSnappingSystem
     // Helper method to check if this brick is already connected to a target brick
     private bool IsAlreadyConnectedTo(BrickBehavior targetBrick)
     {
+        // For boards, check if there's actually a physical joint connection
+        // since boards don't have joints, we should allow re-snapping
+        if (targetBrick.IsBoard)
+        {
+            // Check if there's a joint connecting to this board
+            FixedJoint joint = brick.GetComponent<FixedJoint>();
+            if (joint != null && joint.connectedBody != null && joint.connectedBody.gameObject == targetBrick.gameObject)
+            {
+                brick.LogDebug($"IsAlreadyConnectedTo() - Found existing joint to board {targetBrick.name}");
+                return true;
+            }
+            else
+            {
+                brick.LogDebug($"IsAlreadyConnectedTo() - No joint to board {targetBrick.name}, allowing re-snap");
+                return false;
+            }
+        }
+        
+        // For regular bricks, check the neighbors list
         return brick.ConnectedNeighbors.Contains(targetBrick);
     }
     
@@ -917,7 +986,14 @@ public class BrickSnappingSystem
         // Stabilize each brick in the group
         foreach (var groupBrick in groupBricks)
         {
-            if (groupBrick.GetComponent<Rigidbody>() != null && !groupBrick.GetComponent<UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable>().isSelected)
+            // Skip boards - they should not be stabilized
+            if (groupBrick.IsBoard)
+            {
+                brick.LogDebug($" StabilizeGroupAfterSnap() - Skipping stabilization for board {groupBrick.name}");
+                continue;
+            }
+
+            if (groupBrick.GetComponent<Rigidbody>() != null && !groupBrick.IsGrabbed)
             {
                 // Clear any residual velocities
                 groupBrick.GetComponent<Rigidbody>().linearVelocity = Vector3.zero;

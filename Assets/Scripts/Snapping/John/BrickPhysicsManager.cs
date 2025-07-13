@@ -25,9 +25,16 @@ public class BrickPhysicsManager
 
     public void OnGrabReleased()
     {
+        // Boards cannot be grabbed, so this should never be called for boards
+        if (brick.IsBoard)
+        {
+            brick.LogWarning(" OnGrabReleased() - WARNING: Attempted to release a board in physics manager!");
+            return;
+        }
+
         brick.LogDebug($" OnGrabReleased() - Handling grab release");
         
-        // Find all bricks in the connected group
+        // Find all bricks in the connected group (excluding boards)
         List<BrickBehavior> groupBricks = new List<BrickBehavior>();
         BrickGroupUtils.FindAllConnectedInGroup(brick, groupBricks, brick.name);
         brick.LogDebug($" OnGrabReleased() - Found {groupBricks.Count} bricks in group");
@@ -62,16 +69,16 @@ public class BrickPhysicsManager
                     brick.LogDebug($" StabilizeGroupAfterRelease() - Skipping physics change for {groupBrick.name} (currently snapping)");
                 }
                 else
-                {
-                    // Ensure all bricks are dynamic with gravity
-                    groupBrick.GetComponent<Rigidbody>().isKinematic = false;
-                    groupBrick.GetComponent<Rigidbody>().useGravity = true;
-                    
-                    // Clear any residual velocity to prevent weird behavior
-                    groupBrick.GetComponent<Rigidbody>().linearVelocity = Vector3.zero;
-                    groupBrick.GetComponent<Rigidbody>().angularVelocity = Vector3.zero;
-                    
-                    brick.LogDebug($" StabilizeGroupAfterRelease() - Stabilized {groupBrick.name}: isKinematic=false, useGravity=true, cleared velocities");
+            {
+                // Ensure all bricks are dynamic with gravity
+                groupBrick.GetComponent<Rigidbody>().isKinematic = false;
+                groupBrick.GetComponent<Rigidbody>().useGravity = true;
+                
+                // Clear any residual velocity to prevent weird behavior
+                groupBrick.GetComponent<Rigidbody>().linearVelocity = Vector3.zero;
+                groupBrick.GetComponent<Rigidbody>().angularVelocity = Vector3.zero;
+                
+                brick.LogDebug($" StabilizeGroupAfterRelease() - Stabilized {groupBrick.name}: isKinematic=false, useGravity=true, cleared velocities");
                 }
             }
         }
@@ -81,6 +88,13 @@ public class BrickPhysicsManager
 
     public void ValidatePhysicsState()
     {
+        // Boards should not have their physics validated
+        if (brick.IsBoard)
+        {
+            brick.LogDebug($" ValidatePhysicsState() - Skipping physics validation for board: {brick.name}");
+            return;
+        }
+
         // Throttle validation to prevent performance issues
         if (Time.time - lastValidationTime < VALIDATION_COOLDOWN)
         {
@@ -92,7 +106,7 @@ public class BrickPhysicsManager
         LogPhysicsState("ValidatePhysicsState");
         
         // Check if this brick is currently being grabbed
-        bool isGrabbed = brick.GetComponent<UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable>().isSelected;
+        bool isGrabbed = brick.IsGrabbed;
         if (isGrabbed)
         {
             brick.LogDebug($" ValidatePhysicsState() - Brick is currently grabbed by XRGrabInteractable - physics state managed by XR system");
@@ -164,7 +178,14 @@ public class BrickPhysicsManager
         
         foreach (var groupBrick in groupBricks)
         {
-            if (groupBrick.GetComponent<Rigidbody>() != null && !groupBrick.GetComponent<UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable>().isSelected)
+            // Skip boards - they should never have their physics changed
+            if (groupBrick.IsBoard)
+            {
+                brick.LogDebug($" StabilizeGroup() - Skipping physics change for board {groupBrick.name}");
+                continue;
+            }
+
+            if (groupBrick.GetComponent<Rigidbody>() != null && !groupBrick.IsGrabbed)
             {
                 // IMPORTANT: Don't stabilize physics if the brick is currently snapping
                 // This prevents physics interference during the lerp animation
@@ -173,16 +194,16 @@ public class BrickPhysicsManager
                     brick.LogDebug($" StabilizeGroup() - Skipping physics change for {groupBrick.name} (currently snapping)");
                 }
                 else
-                {
-                    // Clear any residual velocities that might cause unwanted movement
-                    groupBrick.GetComponent<Rigidbody>().linearVelocity = Vector3.zero;
-                    groupBrick.GetComponent<Rigidbody>().angularVelocity = Vector3.zero;
-                    
-                    // Ensure proper physics state
-                    groupBrick.GetComponent<Rigidbody>().isKinematic = false;
-                    groupBrick.GetComponent<Rigidbody>().useGravity = true;
-                    
-                    brick.LogDebug($" StabilizeGroup() - Stabilized {groupBrick.name}: cleared velocities");
+            {
+                // Clear any residual velocities that might cause unwanted movement
+                groupBrick.GetComponent<Rigidbody>().linearVelocity = Vector3.zero;
+                groupBrick.GetComponent<Rigidbody>().angularVelocity = Vector3.zero;
+                
+                // Ensure proper physics state
+                groupBrick.GetComponent<Rigidbody>().isKinematic = false;
+                groupBrick.GetComponent<Rigidbody>().useGravity = true;
+                
+                brick.LogDebug($" StabilizeGroup() - Stabilized {groupBrick.name}: cleared velocities");
                 }
             }
         }
@@ -192,6 +213,13 @@ public class BrickPhysicsManager
 
     private void UpdateMaster(BrickBehavior newMaster)
     {
+        // Boards should not participate in group management
+        if (brick.IsBoard)
+        {
+            brick.LogDebug($" UpdateMaster() - Skipping group management for board {brick.name}");
+            return;
+        }
+
         brick.LogDebug($" UpdateMaster() - Updating group master to: {newMaster.name}");
         
         List<BrickBehavior> groupToUpdate = new List<BrickBehavior>();
@@ -202,7 +230,7 @@ public class BrickPhysicsManager
 
         foreach (var groupBrick in groupToUpdate)
         {
-            brick.LogDebug($" UpdateMaster() - Processing brick: {groupBrick.name}");
+            brick.LogDebug($" UpdateMaster() - DEBUG: Processing brick: {groupBrick.name}", false);
             // Use the public UpdateMaster method on BrickBehavior to update master brick
             groupBrick.UpdateMaster(newMaster);
             brick.LogDebug($" UpdateMaster() - Set {groupBrick.name}'s master to {newMaster.name}");
@@ -221,11 +249,16 @@ public class BrickPhysicsManager
             }
             
             // Set physics properties based on whether this brick is the master
-            // BUT only if the brick is not currently being grabbed
+            // BUT only if the brick is not currently being grabbed AND is not a board
             bool isMaster = (groupBrick == newMaster);
-            bool isGrabbed = groupBrick.GetComponent<UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable>().isSelected;
+            bool isGrabbed = groupBrick.IsGrabbed;
             
-            if (isGrabbed)
+            // Boards should never have their physics changed
+            if (groupBrick.IsBoard)
+            {
+                brick.LogDebug($" UpdateMaster() - Skipping physics change for board {groupBrick.name}");
+            }
+            else if (isGrabbed)
             {
                 brick.LogDebug($" UpdateMaster() - Skipping physics change for {groupBrick.name} (currently grabbed by XRGrabInteractable)");
                 // Do NOT change physics of grabbed bricks - let XRGrabInteractable handle it
@@ -241,16 +274,16 @@ public class BrickPhysicsManager
                 else
                 {
                     // Always restore physics for non-grabbed, non-snapping bricks
-                    groupBrick.GetComponent<Rigidbody>().isKinematic = false;
-                    groupBrick.GetComponent<Rigidbody>().useGravity = true;
-                    
-                    if (isMaster)
-                    {
-                        brick.LogDebug($" UpdateMaster() - Set {groupBrick.name}'s physics (master): isKinematic=false, useGravity=true");
-                    }
-                    else
-                    {
-                        brick.LogDebug($" UpdateMaster() - Set {groupBrick.name}'s physics (non-master): isKinematic=false, useGravity=true");
+                groupBrick.GetComponent<Rigidbody>().isKinematic = false;
+                groupBrick.GetComponent<Rigidbody>().useGravity = true;
+                
+                if (isMaster)
+                {
+                    brick.LogDebug($" UpdateMaster() - Set {groupBrick.name}'s physics (master): isKinematic=false, useGravity=true");
+                }
+                else
+                {
+                    brick.LogDebug($" UpdateMaster() - Set {groupBrick.name}'s physics (non-master): isKinematic=false, useGravity=true");
                     }
                 }
             }

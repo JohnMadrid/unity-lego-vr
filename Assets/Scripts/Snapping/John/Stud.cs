@@ -94,6 +94,7 @@ public class Stud : MonoBehaviour
        ValidateStudSetup();
        
        // Ensure the collider is set to be a trigger. This is essential for the collision logic.
+       // BUT board studs should not have triggers enabled
        Collider col = GetComponent<Collider>();
        if (!col.isTrigger)
        {
@@ -113,9 +114,31 @@ public class Stud : MonoBehaviour
        // This runs after BrickBehavior.Awake() which calls InitializeManagers()
        if (ParentBrick != null)
        {
-           ParentBrick.LogDebug($"Start() - Stud initialized: Type={Type}, StudSize={StudSize}, IsAvailable={IsAvailable}");
-           ParentBrick.LogDebug($"Start() - Collider: {GetComponent<Collider>().name}, isTrigger={GetComponent<Collider>().isTrigger}, enabled={GetComponent<Collider>().enabled}");
-           ParentBrick.LogDebug($"Start() - Position: {transform.position}");
+           // Board studs should have triggers enabled for top studs only
+           if (ParentBrick.IsBoard)
+           {
+               Collider col = GetComponent<Collider>();
+               if (col != null)
+               {
+                   if (Type == StudType.Top)
+                   {
+                       col.isTrigger = true;
+                       col.enabled = true;
+                       ParentBrick.LogDebug($"Start() - Set board top stud to trigger: {name}");
+                   }
+                   else
+                   {
+                       col.enabled = false;
+                       ParentBrick.LogDebug($"Start() - Disabled board bottom stud: {name}");
+                   }
+               }
+           }
+           else
+           {
+               ParentBrick.LogDebug($"Start() - Stud initialized: Type={Type}, StudSize={StudSize}, IsAvailable={IsAvailable}");
+               ParentBrick.LogDebug($"Start() - Collider: {GetComponent<Collider>().name}, isTrigger={GetComponent<Collider>().isTrigger}, enabled={GetComponent<Collider>().enabled}");
+               ParentBrick.LogDebug($"Start() - Position: {transform.position}");
+           }
        }
        else
        {
@@ -127,6 +150,12 @@ public class Stud : MonoBehaviour
    // This function is called when another trigger collider enters this one.
    void OnTriggerEnter(Collider other)
    {
+       // Board bottom studs should never trigger collisions
+       if (ParentBrick != null && ParentBrick.IsBoard && Type == StudType.Bottom)
+       {
+           return;
+       }
+
        // Check if the other object is a stud first
        Stud otherStud = other.GetComponent<Stud>();
        if (otherStud == null)
@@ -215,6 +244,12 @@ public class Stud : MonoBehaviour
    // This function is called when another trigger collider exits this one.
    void OnTriggerExit(Collider other)
    {
+       // Board bottom studs should never trigger collisions
+       if (ParentBrick != null && ParentBrick.IsBoard && Type == StudType.Bottom)
+       {
+           return;
+       }
+
        // Check if the other object is a stud
        Stud otherStud = other.GetComponent<Stud>();
        if (otherStud == null)
@@ -338,6 +373,12 @@ public class Stud : MonoBehaviour
    private bool AreStudsInSameGroup(BrickBehavior brick1, BrickBehavior brick2)
    {
        if (brick1 == null || brick2 == null) return false;
+       
+       // Boards should not participate in group checks
+       if (brick1.IsBoard || brick2.IsBoard)
+       {
+           return false; // Boards are never considered to be in the same group as other objects
+       }
        
        // Use the utility class to check if bricks are in the same group
        return BrickGroupUtils.AreBricksInSameGroup(brick1, brick2);

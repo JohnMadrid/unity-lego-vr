@@ -47,9 +47,16 @@ public class BrickConnectionManager
 
     public void OnGrabStarted(IXRSelectInteractor interactor)
     {
+        // Boards cannot be grabbed, so this should never be called for boards
+        if (brick.IsBoard)
+        {
+            brick.LogWarning("OnGrabStarted() - WARNING: Attempted to grab a board in connection manager!");
+            return;
+        }
+
         brick.LogDebug($"OnGrabStarted() - Handling grab start in connection manager");
         
-        // Find all bricks in the connected group
+        // Find all bricks in the connected group (excluding boards)
         List<BrickBehavior> groupBricks = new List<BrickBehavior>();
         BrickGroupUtils.FindAllConnectedInGroup(brick, groupBricks, brick.name);
         brick.LogDebug($"OnGrabStarted() - Found {groupBricks.Count} bricks in group");
@@ -66,6 +73,13 @@ public class BrickConnectionManager
 
     public void OnGrabReleased()
     {
+        // Boards cannot be grabbed, so this should never be called for boards
+        if (brick.IsBoard)
+        {
+            brick.LogWarning("OnGrabReleased() - WARNING: Attempted to release a board in connection manager!");
+            return;
+        }
+
         brick.LogDebug($"OnGrabReleased() - Handling grab release in connection manager");
         
         // Find all bricks in the connected group
@@ -113,6 +127,13 @@ public class BrickConnectionManager
 
     public void UpdateMaster(BrickBehavior newMaster)
     {
+        // Boards should not participate in group management
+        if (brick.IsBoard)
+        {
+            brick.LogDebug($"UpdateMaster() - Skipping group management for board {brick.name}");
+            return;
+        }
+
         // Prevent recursive calls - if we're already updating to this master, skip
         if (m_MasterBrick == newMaster)
         {
@@ -130,7 +151,7 @@ public class BrickConnectionManager
 
         foreach (var groupBrick in groupToUpdate)
         {
-            brick.LogDebug($"UpdateMaster() - Processing brick: {groupBrick.name}");
+            brick.LogDebug($"UpdateMaster() - DEBUG: Processing brick: {groupBrick.name}", false);
             // Don't call groupBrick.UpdateMaster() as it would call this method again
             groupBrick.ConnectionManager.m_MasterBrick = newMaster;
             brick.LogDebug($"UpdateMaster() - Set {groupBrick.name}'s master to {newMaster.name}");
@@ -149,15 +170,20 @@ public class BrickConnectionManager
             }
             
             // Set physics properties based on whether this brick is the master
-            // BUT only if the brick is not currently being grabbed
+            // BUT only if the brick is not currently being grabbed AND is not a board
             bool isMaster = (groupBrick == newMaster);
-            bool isGrabbed = groupBrick.GetComponent<UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable>().isSelected;
+            bool isGrabbed = groupBrick.IsGrabbed;
             
-            if (!isGrabbed)
+            // Boards should never have their physics changed
+            if (!groupBrick.IsBoard && !isGrabbed)
             {
                 // Master brick should be dynamic with gravity
                 groupBrick.GetComponent<Rigidbody>().isKinematic = false;
                 groupBrick.GetComponent<Rigidbody>().useGravity = true;
+            }
+            else if (groupBrick.IsBoard)
+            {
+                brick.LogDebug($"UpdateMaster() - Skipping physics change for board {groupBrick.name}");
             }
         }
         
@@ -219,8 +245,8 @@ public class BrickConnectionManager
         otherBrick.RemoveNeighbor(brick);
         brick.LogDebug($"UnsnapFrom() - Removed this brick from {otherBrick.name}'s neighbors");
 
-        // Restore physics for this brick ONLY if it's not currently grabbed
-        if (!brick.GetComponent<UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable>().isSelected)
+        // Restore physics for this brick ONLY if it's not currently grabbed AND is not a board
+        if (!brick.IsBoard && !brick.IsGrabbed)
         {
             brick.GetComponent<Rigidbody>().isKinematic = false;
             brick.GetComponent<Rigidbody>().useGravity = true;
@@ -230,19 +256,27 @@ public class BrickConnectionManager
             
             brick.LogDebug($"UnsnapFrom() - Restored physics for this brick: isKinematic=false, useGravity=true, mass=1.0f");
         }
+        else if (brick.IsBoard)
+        {
+            brick.LogDebug($"UnsnapFrom() - Skipping physics change for this brick (it's a board)");
+        }
         else
         {
             brick.LogDebug($"UnsnapFrom() - Skipping physics change for this brick (currently grabbed by XRGrabInteractable)");
         }
         
-        // IMPORTANT: Also restore physics for the other brick if it's not grabbed
-        if (!otherBrick.GetComponent<UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable>().isSelected)
+        // IMPORTANT: Also restore physics for the other brick if it's not grabbed AND is not a board
+        if (!otherBrick.IsBoard && !otherBrick.IsGrabbed)
         {
             otherBrick.GetComponent<Rigidbody>().isKinematic = false;
             otherBrick.GetComponent<Rigidbody>().useGravity = true;
             otherBrick.GetComponent<Rigidbody>().mass = 1.0f;
             
             brick.LogDebug($"UnsnapFrom() - Restored physics for other brick {otherBrick.name}: isKinematic=false, useGravity=true, mass=1.0f");
+        }
+        else if (otherBrick.IsBoard)
+        {
+            brick.LogDebug($"UnsnapFrom() - Skipping physics change for other brick {otherBrick.name} (it's a board)");
         }
         else
         {

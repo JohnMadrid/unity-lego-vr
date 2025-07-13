@@ -45,7 +45,14 @@ public static class BrickGroupUtils
             return;
         }
         
-        brick.LogDebug($"FindAllConnectedInGroup() - Visiting brick: {brick.name}");
+        // Boards should not participate in group traversal at all
+        if (brick.IsBoard)
+        {
+            brick.LogDebug($"FindAllConnectedInGroup() - DEBUG: Skipping board {brick.name} - boards don't participate in group management", false);
+            return;
+        }
+        
+        brick.LogDebug($"FindAllConnectedInGroup() - DEBUG: Visiting brick: {brick.name}", false);
         
         visited.Add(brick);
         
@@ -54,6 +61,13 @@ public static class BrickGroupUtils
         // Recursively check all connected neighbors
         foreach (var neighbor in brick.ConnectedNeighbors)
         {
+            // Skip boards - they should not be part of group traversal
+            if (neighbor.IsBoard)
+            {
+                brick.LogDebug($"FindAllConnectedInGroup() - DEBUG: Skipping board neighbor: {neighbor.name}", false);
+                continue;
+            }
+            
             brick.LogDebug($"FindAllConnectedInGroup() - DEBUG: Recursively checking neighbor of {brick.name}: {neighbor.name}", false);
             FindAllConnectedInGroup(neighbor, visited, context);
         }
