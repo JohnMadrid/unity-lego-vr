@@ -19,43 +19,43 @@ public class BrickStudManager
 
     public void DiscoverStuds()
     {
-        Debug.Log($"[{brick.name}] DiscoverStuds() - Starting stud discovery");
+        brick.LogDebug($" DiscoverStuds() - Starting stud discovery");
         
         topStuds.Clear();
         bottomStuds.Clear();
 
         Stud[] allStuds = brick.GetComponentsInChildren<Stud>();
-        Debug.Log($"[{brick.name}] DiscoverStuds() - Found {allStuds.Length} total studs");
+        brick.LogDebug($" DiscoverStuds() - Found {allStuds.Length} total studs");
 
         foreach (Stud stud in allStuds)
         {
             // Give each stud a reference back to this parent brick
             stud.ParentBrick = brick;
-            Debug.Log($"[{brick.name}] DiscoverStuds() - Set parent brick for stud: {stud.name}");
+            brick.LogDebug($" DiscoverStuds() - Set parent brick for stud: {stud.name}");
 
             if (stud.Type == Stud.StudType.Top)
             {
                 topStuds.Add(stud);
-                Debug.Log($"[{brick.name}] DiscoverStuds() - Added top stud: '{stud.name}' at local position {stud.transform.localPosition}");
+                brick.LogDebug($" DiscoverStuds() - Added top stud: '{stud.name}' at local position {stud.transform.localPosition}");
             }
             else
             {
                 bottomStuds.Add(stud);
-                Debug.Log($"[{brick.name}] DiscoverStuds() - Added bottom stud: '{stud.name}' at local position {stud.transform.localPosition}");
+                brick.LogDebug($" DiscoverStuds() - Added bottom stud: '{stud.name}' at local position {stud.transform.localPosition}");
             }
         }
 
         if (allStuds.Length == 0)
         {
-            Debug.LogWarning($"[{brick.name}] DiscoverStuds() - WARNING: Brick has no 'Stud' components on its children. It won't be able to snap.");
+            brick.LogWarning($"[{brick.name}] DiscoverStuds() - WARNING: Brick has no 'Stud' components on its children. It won't be able to snap.");
         }
         
-        Debug.Log($"[{brick.name}] DiscoverStuds() - Discovery complete. Top Studs: {topStuds.Count}, Bottom Studs: {bottomStuds.Count}");
+        brick.LogDebug($" DiscoverStuds() - Discovery complete. Top Studs: {topStuds.Count}, Bottom Studs: {bottomStuds.Count}");
     }
 
     public void DisableStudCollisions()
     {
-        Debug.Log($"[{brick.name}] DisableStudCollisions() - Disabling collision detection on all studs");
+        brick.LogDebug($" DisableStudCollisions() - Disabling collision detection on all studs");
         
         // Disable colliders on all studs temporarily
         foreach (var stud in topStuds)
@@ -81,10 +81,29 @@ public class BrickStudManager
     // Coroutine to re-enable stud collision detection
     private IEnumerator ReenableStudCollisions()
     {
-        // Wait for the snap animation to complete
-        yield return new WaitForSeconds(0.5f);
+        brick.LogDebug($" ReenableStudCollisions() - Waiting for snap animation to complete");
         
-        Debug.Log($"[{brick.name}] ReenableStudCollisions() - Re-enabling collision detection on all studs");
+        // Wait for the snap animation to actually complete, not just a fixed time
+        // This prevents physics interference during the lerp movement
+        int waitCount = 0;
+        const int MAX_WAIT_FRAMES = 120; // 2 seconds at 60fps (increased from 0.5s)
+        
+        while (brick.isSnapping && waitCount < MAX_WAIT_FRAMES)
+        {
+            waitCount++;
+            if (waitCount % 30 == 0) // Log every 30 frames (about 0.5 seconds at 60fps)
+            {
+                brick.LogDebug($" ReenableStudCollisions() - Still waiting for snap to complete, frame {waitCount}, isSnapping: {brick.isSnapping}", true);
+            }
+            yield return null;
+        }
+        
+        if (waitCount >= MAX_WAIT_FRAMES)
+        {
+            brick.LogWarning($" ReenableStudCollisions() - WARNING: Timeout reached! Force re-enabling collisions after {waitCount} frames");
+        }
+        
+        brick.LogDebug($" ReenableStudCollisions() - Re-enabling collision detection on all studs after {waitCount} frames");
         
         // Re-enable colliders on all studs
         foreach (var stud in topStuds)
@@ -106,7 +125,7 @@ public class BrickStudManager
 
     public void EnableStudCollisions()
     {
-        Debug.Log($"[{brick.name}] EnableStudCollisions() - Enabling collision detection on all studs");
+        brick.LogDebug($" EnableStudCollisions() - Enabling collision detection on all studs");
         
         // Enable colliders on all studs
         foreach (var stud in topStuds)

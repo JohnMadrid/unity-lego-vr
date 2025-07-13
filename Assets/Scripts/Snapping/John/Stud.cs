@@ -59,7 +59,7 @@ public class Stud : MonoBehaviour
        {
            if (currentState != value)
            {
-               Debug.Log($"[{name}] Stud state changed from {currentState} to {value}");
+               ParentBrick.LogDebug($"Stud state changed from {currentState} to {value}");
                currentState = value;
            }
        }
@@ -80,22 +80,23 @@ public class Stud : MonoBehaviour
        Collider col = GetComponent<Collider>();
        if (col == null)
        {
-           Debug.LogError($"[{name}] Stud missing required Collider component!");
+           Debug.LogWarning($"Stud '{name}' missing required Collider component!");
        }
        else if (!col.isTrigger)
        {
-           Debug.LogWarning($"[{name}] Stud collider should be set to 'Is Trigger'");
+           Debug.LogWarning($"Stud '{name}' collider should be set to 'Is Trigger'");
        }
    }
 
    void Awake()
    {
+       // Basic setup that doesn't require ParentBrick
        ValidateStudSetup();
+       
        // Ensure the collider is set to be a trigger. This is essential for the collision logic.
        Collider col = GetComponent<Collider>();
        if (!col.isTrigger)
        {
-           Debug.LogWarning($"Collider on stud '{name}' was not set to 'Is Trigger'. Forcing it now.", this);
            col.isTrigger = true;
        }
 
@@ -104,12 +105,22 @@ public class Stud : MonoBehaviour
        {
            originalMaterial = studRenderer.material;
        }
-       
-       // Debug information about stud setup
-       Debug.Log($"[{name}] Awake() - Stud initialized: Type={Type}, StudSize={StudSize}, IsAvailable={IsAvailable}");
-       Debug.Log($"[{name}] Awake() - Collider: {col.name}, isTrigger={col.isTrigger}, enabled={col.enabled}");
-       Debug.Log($"[{name}] Awake() - Position: {transform.position}");
-       // Note: ParentBrick will be set later by BrickStudManager.DiscoverStuds()
+   }
+
+   void Start()
+   {
+       // Deferred initialization that requires ParentBrick to be assigned
+       // This runs after BrickBehavior.Awake() which calls InitializeManagers()
+       if (ParentBrick != null)
+       {
+           ParentBrick.LogDebug($"Start() - Stud initialized: Type={Type}, StudSize={StudSize}, IsAvailable={IsAvailable}");
+           ParentBrick.LogDebug($"Start() - Collider: {GetComponent<Collider>().name}, isTrigger={GetComponent<Collider>().isTrigger}, enabled={GetComponent<Collider>().enabled}");
+           ParentBrick.LogDebug($"Start() - Position: {transform.position}");
+       }
+       else
+       {
+           Debug.LogWarning($"Stud '{name}' has no ParentBrick assigned in Start() - this should not happen!");
+       }
    }
 
 
@@ -125,12 +136,12 @@ public class Stud : MonoBehaviour
        }
        
        // Now we know it's a stud, so we can show debug messages
-       Debug.Log($"[{name}] OnTriggerEnter() - Collision detected with stud {other.name}");
+       ParentBrick.LogDebug($"OnTriggerEnter() - Collision detected with stud {other.name}");
        
        // IMPORTANT: Check if these studs belong to the same brick or connected group
        if (ParentBrick == otherStud.ParentBrick)
        {
-           Debug.Log($"[{name}] OnTriggerEnter() - Same brick collision, ignoring");
+           ParentBrick.LogDebug($"OnTriggerEnter() - Same brick collision, ignoring");
            return;
        }
        
@@ -139,7 +150,7 @@ public class Stud : MonoBehaviour
        {
            if (AreStudsInSameGroup(ParentBrick, otherStud.ParentBrick))
            {
-               Debug.Log($"[{name}] OnTriggerEnter() - Same group collision, ignoring");
+               ParentBrick.LogDebug($"OnTriggerEnter() - Same group collision, ignoring");
                return;
            }
        }
@@ -147,7 +158,7 @@ public class Stud : MonoBehaviour
        // Rate limiting
        if (Time.time - lastCollisionTime < (ParentBrick != null ? ParentBrick.collisionCooldown : 0.1f))
        {
-           Debug.Log($"[{name}] OnTriggerEnter() - Rate limited, ignoring collision");
+           ParentBrick.LogDebug($"OnTriggerEnter() - Rate limited, ignoring collision");
            return;
        }
        lastCollisionTime = Time.time;
@@ -155,30 +166,30 @@ public class Stud : MonoBehaviour
        // Ignore if our parent brick is not in a state to snap (e.g., not being held and just released).
        if (ParentBrick == null)
        {
-           Debug.LogWarning($"[{name}] OnTriggerEnter() - WARNING: ParentBrick is null!");
+           ParentBrick.LogWarning($"OnTriggerEnter() - WARNING: ParentBrick is null!");
            return;
        }
        
        if (!ParentBrick.IsReadyForSnap())
        {
-           Debug.Log($"[{name}] OnTriggerEnter() - Parent brick not ready for snap, ignoring collision");
+           ParentBrick.LogDebug($"OnTriggerEnter() - Parent brick not ready for snap, ignoring collision");
            return;
        }
 
        // Crucial Check: Ensure the stud types are compatible (Top can only snap to Bottom).
        if (this.Type == otherStud.Type)
        {
-           Debug.Log($"[Stud Collision] IGNORED: Stud '{this.name}' ({this.Type}) on brick '{ParentBrick.name}' detected stud '{otherStud.name}' ({otherStud.Type}) on brick '{otherStud.ParentBrick.name}', but types are the same.");
+           ParentBrick.LogDebug($"[Stud Collision] IGNORED: Stud '{this.name}' ({this.Type}) on brick '{ParentBrick.name}' detected stud '{otherStud.name}' ({otherStud.Type}) on brick '{otherStud.ParentBrick.name}', but types are the same.");
            return; // Both are Top, or both are Bottom. Invalid connection.
        }
       
        // Check distance for snap tolerance
        float distance = Vector3.Distance(transform.position, other.transform.position);
        float maxSnapDistance = ParentBrick != null ? ParentBrick.maxSnapDistance : 0.05f;
-       Debug.Log($"[{name}] OnTriggerEnter() - Distance to {otherStud.name}: {distance:F6}, snapTolerance: {ParentBrick?.snapTolerance ?? 0.01f:F6}, maxSnapDistance: {maxSnapDistance:F6}");
+       ParentBrick.LogDebug($"OnTriggerEnter() - Distance to {otherStud.name}: {distance:F6}, snapTolerance: {ParentBrick?.snapTolerance ?? 0.01f:F6}, maxSnapDistance: {maxSnapDistance:F6}");
        if (distance > maxSnapDistance)
        {
-           Debug.Log($"[Stud Collision] IGNORED: Stud '{this.name}' too far from '{other.name}' (distance: {distance:F6} > {maxSnapDistance:F6})");
+           ParentBrick.LogDebug($"[Stud Collision] IGNORED: Stud '{this.name}' too far from '{other.name}' (distance: {distance:F6} > {maxSnapDistance:F6})");
            return;
        }
        
@@ -186,11 +197,11 @@ public class Stud : MonoBehaviour
        if (Time.time < ParentBrick.snapImmunityEndTime || 
            Time.time < otherStud.ParentBrick.snapImmunityEndTime)
        {
-           Debug.Log($"[Stud Collision] IGNORED: One or both bricks in snap immunity period after split");
+           ParentBrick.LogDebug($"[Stud Collision] IGNORED: One or both bricks in snap immunity period after split");
            return;
        }
        
-       Debug.Log($"<color=cyan>[Stud Collision] VALIDATED: Stud '{this.name}' ({this.Type}) on brick '{ParentBrick.name}' has collided with stud '{otherStud.name}' ({otherStud.Type}) on brick '{otherStud.ParentBrick.name}'. Storing potential snap.</color>");
+       ParentBrick.LogDebug($"<color=cyan>[Stud Collision] VALIDATED: Stud '{this.name}' ({this.Type}) on brick '{ParentBrick.name}' has collided with stud '{otherStud.name}' ({otherStud.Type}) on brick '{otherStud.ParentBrick.name}'. Storing potential snap.</color>");
        
        // Set the stud to InSnapRange state and show visual feedback
        CurrentState = StudState.InSnapRange;
@@ -214,7 +225,7 @@ public class Stud : MonoBehaviour
        // If we were in snap range and the collision ended, reset to idle
        if (CurrentState == StudState.InSnapRange)
        {
-           Debug.Log($"[{name}] OnTriggerExit() - Exiting snap range with {otherStud.name}");
+           ParentBrick.LogDebug($"OnTriggerExit() - Exiting snap range with {otherStud.name}");
            CurrentState = StudState.Idle;
            ResetVisual();
        }
@@ -290,13 +301,13 @@ public class Stud : MonoBehaviour
            connectionTime = Time.time
        };
        activeConnections.Add(connection);
-       Debug.Log($"[{name}] Added connection to {otherStud.name} with strength {strength}");
+       ParentBrick.LogDebug($"Added connection to {otherStud.name} with strength {strength}");
    }
 
    public void RemoveConnection(Stud otherStud)
    {
        activeConnections.RemoveAll(c => c.connectedStud == otherStud);
-       Debug.Log($"[{name}] Removed connection to {otherStud.name}");
+       ParentBrick.LogDebug($"Removed connection to {otherStud.name}");
    }
 
    public bool IsConnectedTo(Stud otherStud)
@@ -336,7 +347,7 @@ public class Stud : MonoBehaviour
    {
        if (CurrentState == StudState.InSnapRange)
        {
-           Debug.Log($"[{name}] ClearSnapRangeState() - Clearing snap range state");
+           ParentBrick.LogDebug($"ClearSnapRangeState() - Clearing snap range state");
            CurrentState = StudState.Idle;
            ResetVisual();
        }

@@ -21,39 +21,39 @@ public class BrickSnappingSystem
     // This is the core method, called by a Stud when it collides with another valid stud.
     public void RequestSnap(Stud ourStud, Stud targetStud)
     {
-        Debug.Log($"[{brick.name}] RequestSnap() - Request from stud '{ourStud.name}' to target stud '{targetStud.name}'");
+        brick.LogDebug($"RequestSnap() - Request from stud '{ourStud.name}' to target stud '{targetStud.name}'");
         
         if (brick.GetComponent<BrickBehavior>().isSnapping)
         {
-            Debug.Log($"[{brick.name}] RequestSnap() - Already snapping, ignoring request");
+            brick.LogDebug($"RequestSnap() - Already snapping, ignoring request");
             return;
         }
 
         BrickBehavior targetBrick = targetStud.ParentBrick;
         if (targetBrick == null)
         {
-            Debug.LogWarning($"[{brick.name}] RequestSnap() - WARNING: Target stud has no parent brick");
+            brick.LogWarning($"RequestSnap() - WARNING: Target stud has no parent brick");
             return;
         }
         
         if (targetBrick == brick)
         {
-            Debug.Log($"[{brick.name}] RequestSnap() - Ignoring snap to self");
+            brick.LogDebug($"RequestSnap() - Ignoring snap to self");
             return;
         }
 
         // Check if we're already connected to this brick
         if (IsAlreadyConnectedTo(targetBrick))
         {
-            Debug.Log($"[{brick.name}] RequestSnap() - Already connected to target brick, ignoring");
+            brick.LogDebug($"RequestSnap() - Already connected to target brick, ignoring");
             return;
         }
 
-        Debug.Log($"[{brick.name}] RequestSnap() - Target brick: {targetBrick.name}");
+        brick.LogDebug($"RequestSnap() - Target brick: {targetBrick.name}");
 
         // DEBUG: Log positions of both bricks and studs
-        Debug.Log($"[{brick.name}] RequestSnap() - DEBUG: Grabbed brick position: {brick.transform.position}, rotation: {brick.transform.rotation.eulerAngles}");
-        Debug.Log($"[{brick.name}] RequestSnap() - DEBUG: Target brick position: {targetBrick.transform.position}, rotation: {targetBrick.transform.rotation.eulerAngles}");
+        brick.LogDebug($"RequestSnap() - DEBUG: Grabbed brick position: {brick.transform.position}, rotation: {brick.transform.rotation.eulerAngles}", false);
+        brick.LogDebug($"RequestSnap() - DEBUG: Target brick position: {targetBrick.transform.position}, rotation: {targetBrick.transform.rotation.eulerAngles}", false);
         
         // Calculate and log the relative rotation at release time
         // Use Vector3.SignedAngle to get the true relative rotation around the shared local Z-axis
@@ -63,95 +63,94 @@ public class BrickSnappingSystem
         // Calculate the signed angle from target's right-vector to released's right-vector around world Z
         float relativeZ = Vector3.SignedAngle(targetRight, brickRight, Vector3.forward);
         
-        Debug.Log($"[{brick.name}] RequestSnap() - DEBUG: Relative rotation at release - Z: {relativeZ:F1}°");
-        Debug.Log($"[{brick.name}] RequestSnap() - DEBUG: Grabbed brick rotation: {brick.transform.rotation.eulerAngles}");
-        Debug.Log($"[{brick.name}] RequestSnap() - DEBUG: Target brick rotation: {targetBrick.transform.rotation.eulerAngles}");
-        Debug.Log($"[{brick.name}] RequestSnap() - DEBUG: Grabbed brick right vector: {brickRight}");
-        Debug.Log($"[{brick.name}] RequestSnap() - DEBUG: Target brick right vector: {targetRight}");
+        brick.LogDebug($"RequestSnap() - DEBUG: Relative rotation at release - Z: {relativeZ:F1}°", false);
+        brick.LogDebug($"RequestSnap() - DEBUG: Grabbed brick rotation: {brick.transform.rotation.eulerAngles}", false);
+        brick.LogDebug($"RequestSnap() - DEBUG: Target brick rotation: {targetBrick.transform.rotation.eulerAngles}", false);
+        brick.LogDebug($"RequestSnap() - DEBUG: Grabbed brick right vector: {brickRight}", false);
+        brick.LogDebug($"RequestSnap() - DEBUG: Target brick right vector: {targetRight}", false);
         
         // ADDITIONAL DEBUG: Check if the relative rotation makes sense for LEGO bricks
         // For LEGO bricks at 90° relative rotation, we expect the relative Z to be close to 90°, -90°, 180°, or -180°
         float absRelativeZ = Mathf.Abs(relativeZ);
         if (absRelativeZ < 10f)
         {
-            Debug.Log($"[{brick.name}] RequestSnap() - DEBUG: WARNING: Relative Z rotation is very small ({relativeZ:F1}°), bricks appear to be aligned!");
+            brick.LogDebug($"RequestSnap() - DEBUG: WARNING: Relative Z rotation is very small ({relativeZ:F1}°), bricks appear to be aligned!", false);
         }
         else if (absRelativeZ > 80f && absRelativeZ < 100f)
         {
-            Debug.Log($"[{brick.name}] RequestSnap() - DEBUG: Relative Z rotation is close to 90° ({relativeZ:F1}°), this is expected for LEGO bricks!");
+            brick.LogDebug($"RequestSnap() - DEBUG: Relative Z rotation is close to 90° ({relativeZ:F1}°), this is expected for LEGO bricks!", false);
         }
         else if (absRelativeZ > 170f && absRelativeZ < 190f)
         {
-            Debug.Log($"[{brick.name}] RequestSnap() - DEBUG: Relative Z rotation is close to 180° ({relativeZ:F1}°), this is expected for LEGO bricks!");
+            brick.LogDebug($"RequestSnap() - DEBUG: Relative Z rotation is close to 180° ({relativeZ:F1}°), this is expected for LEGO bricks!", false);
         }
         else
         {
-            Debug.Log($"[{brick.name}] RequestSnap() - DEBUG: Relative Z rotation is {relativeZ:F1}°, not a standard LEGO alignment!");
+            brick.LogDebug($"RequestSnap() - DEBUG: Relative Z rotation is {relativeZ:F1}°, not a standard LEGO alignment!", false);
         }
-        
 
-        Debug.Log($"[{brick.name}] RequestSnap() - DEBUG: Our stud world position: {ourStud.transform.position}");
-        Debug.Log($"[{brick.name}] RequestSnap() - DEBUG: Target stud world position: {targetStud.transform.position}");
-        Debug.Log($"[{brick.name}] RequestSnap() - DEBUG: Distance between studs: {Vector3.Distance(ourStud.transform.position, targetStud.transform.position):F6}");
-        Debug.Log($"[{brick.name}] RequestSnap() - DEBUG: Our stud local position: {ourStud.transform.localPosition}");
-        Debug.Log($"[{brick.name}] RequestSnap() - DEBUG: Target stud local position: {targetStud.transform.localPosition}");
+        brick.LogDebug($"RequestSnap() - DEBUG: Our stud world position: {ourStud.transform.position}", false);
+        brick.LogDebug($"RequestSnap() - DEBUG: Target stud world position: {targetStud.transform.position}", false);
+        brick.LogDebug($"RequestSnap() - DEBUG: Distance between studs: {Vector3.Distance(ourStud.transform.position, targetStud.transform.position):F6}", false);
+        brick.LogDebug($"RequestSnap() - DEBUG: Our stud local position: {ourStud.transform.localPosition}", false);
+        brick.LogDebug($"RequestSnap() - DEBUG: Target stud local position: {targetStud.transform.localPosition}", false);
 
         // Validate stud compatibility
         if (ourStud.Type == targetStud.Type)
         {
-            Debug.LogWarning($"[{brick.name}] RequestSnap() - WARNING: Cannot snap {ourStud.Type} to {targetStud.Type}!");
+            brick.LogWarning($"RequestSnap() - WARNING: Cannot snap {ourStud.Type} to {targetStud.Type}!");
             return;
         }
 
         // Check if there are multiple potential snap points
         List<Stud> potentialSnapPoints = FindPotentialSnapPoints(ourStud, targetBrick);
-        Debug.Log($"[{brick.name}] RequestSnap() - Found {potentialSnapPoints.Count} potential snap points");
+        brick.LogDebug($"RequestSnap() - Found {potentialSnapPoints.Count} potential snap points", true);
 
         if (potentialSnapPoints.Count == 0)
         {
-            Debug.Log($"[{brick.name}] RequestSnap() - No valid snap points found");
+            brick.LogDebug($"RequestSnap() - No valid snap points found", true);
             return;
         }
 
         // For multiple stud connections (like 2x1 bricks), we need to find the best overall alignment
         if (potentialSnapPoints.Count > 1)
         {
-            Debug.Log($"[{brick.name}] RequestSnap() - Multiple snap points detected, finding best overall alignment");
+            brick.LogDebug($"RequestSnap() - Multiple snap points detected, finding best overall alignment", true);
             
             // Find the best alignment that maximizes the number of connecting studs
             Stud bestTargetStud = FindBestMultiStudAlignment(ourStud, potentialSnapPoints, targetBrick);
             if (bestTargetStud != null)
             {
                 targetStud = bestTargetStud;
-                Debug.Log($"[{brick.name}] RequestSnap() - Selected best multi-stud alignment: {targetStud.name}");
+                brick.LogDebug($"RequestSnap() - Selected best multi-stud alignment: {targetStud.name}", true);
             }
             else
             {
-                Debug.LogWarning($"[{brick.name}] RequestSnap() - WARNING: Could not find good multi-stud alignment, falling back to single stud");
+                brick.LogWarning($"RequestSnap() - WARNING: Could not find good multi-stud alignment, falling back to single stud", true);
                 targetStud = ChooseBestSnapPoint(ourStud, potentialSnapPoints);
             }
         }
         else
         {
             targetStud = potentialSnapPoints[0];
-            Debug.Log($"[{brick.name}] RequestSnap() - Using single snap point: {targetStud.name}");
+            brick.LogDebug($"RequestSnap() - Using single snap point: {targetStud.name}", true);
         }
 
         // Store target brick's initial rotation for debugging
         Vector3 initialTargetRotation = targetBrick.transform.rotation.eulerAngles;
-        Debug.Log($"[{brick.name}] RequestSnap() - DEBUG: Target brick initial rotation: {initialTargetRotation}");
+        brick.LogDebug($"RequestSnap() - DEBUG: Target brick initial rotation: {initialTargetRotation}", false);
 
         // Calculate snap position and rotation
-        Debug.Log($"[{brick.name}] RequestSnap() - About to call CalculateSnapTransform");
+        brick.LogDebug($"RequestSnap() - About to call CalculateSnapTransform", true);
         CalculateSnapTransform(ourStud, targetStud, targetBrick);
-        Debug.Log($"[{brick.name}] RequestSnap() - CalculateSnapTransform completed");
+        brick.LogDebug($"RequestSnap() - CalculateSnapTransform completed", true);
         
         // Check if target brick rotation changed during calculation
         Vector3 finalTargetRotation = targetBrick.transform.rotation.eulerAngles;
         if (Vector3.Distance(initialTargetRotation, finalTargetRotation) > 0.1f)
         {
-            Debug.LogWarning($"[{brick.name}] RequestSnap() - WARNING: Target brick rotation changed during snap calculation!");
-            Debug.LogWarning($"[{brick.name}] RequestSnap() - Initial: {initialTargetRotation}, Final: {finalTargetRotation}");
+            brick.LogWarning($"RequestSnap() - WARNING: Target brick rotation changed during snap calculation!", true);
+            brick.LogWarning($"RequestSnap() - Initial: {initialTargetRotation}, Final: {finalTargetRotation}", true);
         }
 
         // Disable physics during snap for both bricks to prevent interference
@@ -159,7 +158,7 @@ public class BrickSnappingSystem
         {
             brick.GetComponent<Rigidbody>().isKinematic = true;
             brick.GetComponent<Rigidbody>().useGravity = false;
-            Debug.Log($"[{brick.name}] RequestSnap() - Disabled physics for snap animation");
+            brick.LogDebug($"RequestSnap() - Disabled physics for snap animation", true);
         }
         
         // IMPORTANT: Also disable physics on target brick to prevent it from moving during snap
@@ -167,7 +166,7 @@ public class BrickSnappingSystem
         {
             targetBrick.GetComponent<Rigidbody>().isKinematic = true;
             targetBrick.GetComponent<Rigidbody>().useGravity = false;
-            Debug.Log($"[{brick.name}] RequestSnap() - Disabled physics on target brick to prevent interference");
+            brick.LogDebug($"RequestSnap() - Disabled physics on target brick to prevent interference", true);
         }
 
         // Set snapping state
@@ -180,22 +179,22 @@ public class BrickSnappingSystem
         ourStud.SetSnapping(true);
         targetStud.SetSnapping(true);
 
-        Debug.Log($"[{brick.name}] RequestSnap() - Snap initiated. Target position: {targetSnapPosition}, Target rotation: {targetSnapRotation.eulerAngles}");
-        Debug.Log($"[{brick.name}] RequestSnap() - Current brick position: {brick.transform.position}, Current rotation: {brick.transform.rotation.eulerAngles}");
-        Debug.Log($"[{brick.name}] RequestSnap() - Position difference: {Vector3.Distance(brick.transform.position, targetSnapPosition):F6}");
-        Debug.Log($"[{brick.name}] RequestSnap() - Rotation difference: {Quaternion.Angle(brick.transform.rotation, targetSnapRotation):F2}°");
+        brick.LogDebug($"RequestSnap() - Snap initiated. Target position: {targetSnapPosition}, Target rotation: {targetSnapRotation.eulerAngles}", true);
+        brick.LogDebug($"RequestSnap() - DEBUG: Current brick position: {brick.transform.position}, Current rotation: {brick.transform.rotation.eulerAngles}", false);
+        brick.LogDebug($"RequestSnap() - DEBUG: Position difference: {Vector3.Distance(brick.transform.position, targetSnapPosition):F6}", false);
+        brick.LogDebug($"RequestSnap() - DEBUG: Rotation difference: {Quaternion.Angle(brick.transform.rotation, targetSnapRotation):F2}°", false);
     }
 
     private void CalculateSnapTransform(Stud ourStud, Stud targetStud, BrickBehavior targetBrick)
     {
-        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Calculating snap transform for {ourStud.Type} to {targetStud.Type}");
-        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Our brick position: {brick.transform.position}");
-        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Target brick position: {targetBrick.transform.position}");
+        brick.LogDebug($"CalculateSnapTransform() - Calculating snap transform for {ourStud.Type} to {targetStud.Type}", true);
+        brick.LogDebug($"CalculateSnapTransform() - DEBUG: Our brick position: {brick.transform.position}", false);
+        brick.LogDebug($"CalculateSnapTransform() - DEBUG: Target brick position: {targetBrick.transform.position}", false);
 
         // Validate stud compatibility
         if (ourStud.Type == targetStud.Type)
         {
-            Debug.LogWarning($"[{brick.name}] CalculateSnapTransform() - WARNING: Cannot snap {ourStud.Type} to {targetStud.Type}!");
+            brick.LogWarning($"CalculateSnapTransform() - WARNING: Cannot snap {ourStud.Type} to {targetStud.Type}!");
             return;
         }
 
@@ -203,25 +202,37 @@ public class BrickSnappingSystem
         Vector3 ourStudWorldPos = ourStud.transform.position;
         Vector3 targetStudWorldPos = targetStud.transform.position;
         
-        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Stud positions: Our={ourStudWorldPos}, Target={targetStudWorldPos}");
+        brick.LogDebug($"CalculateSnapTransform() - DEBUG: Stud positions: Our={ourStudWorldPos}, Target={targetStudWorldPos}", false);
 
         // STEP 1: Calculate final position assuming brick matches target brick rotation on all axes
         // Get our stud's local position relative to our brick
         Vector3 ourStudLocalPos = ourStud.transform.localPosition;
-        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Our stud local position: {ourStudLocalPos}");
+        brick.LogDebug($"CalculateSnapTransform() - DEBUG: Our stud local position: {ourStudLocalPos}", false);
 
         // First, assume the brick will have the same rotation as the target brick (for position calculation)
         Quaternion targetBrickRotation = targetBrick.transform.rotation;
-        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Using target brick rotation for position calculation: {targetBrickRotation.eulerAngles}");
+        brick.LogDebug($"CalculateSnapTransform() - DEBUG: Using target brick rotation for position calculation: {targetBrickRotation.eulerAngles}", false);
 
         // Calculate the final position using a simpler, more direct approach
         // We want our stud to end up at the target stud's world position
         // So our brick center needs to be: target stud position - (our stud's position in final rotation)
         
         // First calculate the final rotation
-        Debug.Log($"[{brick.name}] CalculateSnapTransform() - About to call AdjustZAxisToMatchTarget");
-        Quaternion finalRotation = AdjustZAxisToMatchTarget(brick.transform.rotation, targetBrick);
-        Debug.Log($"[{brick.name}] CalculateSnapTransform() - AdjustZAxisToMatchTarget completed, final rotation: {finalRotation.eulerAngles}");
+        brick.LogDebug($"CalculateSnapTransform() - About to call AlignXYPlanes", true);
+        Quaternion alignedRotation = AlignXYPlanes(brick.transform.rotation, targetBrick);
+        brick.LogDebug($"CalculateSnapTransform() - AlignXYPlanes completed, aligned rotation: {alignedRotation.eulerAngles}", true);
+        
+        // For LEGO-style alignment, find the closest 90° increment relative to aligned rotation
+        Quaternion finalRotation = FindClosest90DegreeIncrement(brick.transform.rotation, alignedRotation);
+        
+        brick.LogDebug($"CalculateSnapTransform() - DEBUG: Target brick rotation: {targetBrick.transform.rotation.eulerAngles}", false);
+        brick.LogDebug($"CalculateSnapTransform() - DEBUG: Using closest 90° increment for final alignment: {finalRotation.eulerAngles}", false);
+        
+        brick.LogDebug($"CalculateSnapTransform() - DEBUG: Original rotation: {brick.transform.rotation.eulerAngles}", false);
+        brick.LogDebug($"CalculateSnapTransform() - DEBUG: Target brick rotation: {targetBrick.transform.rotation.eulerAngles}", false);
+        brick.LogDebug($"CalculateSnapTransform() - DEBUG: Final rotation (matching target): {finalRotation.eulerAngles}", false);
+        
+        brick.LogDebug($"CalculateSnapTransform() - DEBUG: Final rotation: {finalRotation.eulerAngles}", false);
         
         // Calculate where our stud will be in the final rotation
         Vector3 ourStudInFinalRotation = finalRotation * ourStudLocalPos;
@@ -229,9 +240,9 @@ public class BrickSnappingSystem
         // Calculate final position: target stud position - our stud position in final rotation
         Vector3 finalPosition = targetStudWorldPos - ourStudInFinalRotation;
         
-        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Our stud local position: {ourStudLocalPos}");
-        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Our stud in final rotation: {ourStudInFinalRotation}");
-        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Initial position calculation: {targetStudWorldPos} - {ourStudInFinalRotation} = {finalPosition}");
+        brick.LogDebug($"CalculateSnapTransform() - DEBUG: Our stud local position: {ourStudLocalPos}", false);
+        brick.LogDebug($"CalculateSnapTransform() - DEBUG: Our stud in final rotation: {ourStudInFinalRotation}", false);
+        brick.LogDebug($"CalculateSnapTransform() - DEBUG: Initial position calculation: {targetStudWorldPos} - {ourStudInFinalRotation} = {finalPosition}", false);
         
         // Calculate offset using the direction from relative target brick center to target stud
         // This creates a "relative target brick center" that works for any brick size
@@ -241,24 +252,24 @@ public class BrickSnappingSystem
         Vector3 snapOffset = relativeTargetBrickToStud * 0.001f; // 1mm offset in stud direction
         finalPosition += snapOffset;
         
-        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Target stud local position: {targetStudLocalPos}");
-        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Relative target brick center: {relativeTargetBrickCenter}");
-        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Relative target brick to stud direction: {relativeTargetBrickToStud}");
-        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Added snap offset: {snapOffset}");
-        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Position after offset: {finalPosition}");
+        brick.LogDebug($"CalculateSnapTransform() - DEBUG: Target stud local position: {targetStudLocalPos}", false);
+        brick.LogDebug($"CalculateSnapTransform() - DEBUG: Relative target brick center: {relativeTargetBrickCenter}", false);
+        brick.LogDebug($"CalculateSnapTransform() - DEBUG: Relative target brick to stud direction: {relativeTargetBrickToStud}", false);
+        brick.LogDebug($"CalculateSnapTransform() - DEBUG: Added snap offset: {snapOffset}", false);
+        brick.LogDebug($"CalculateSnapTransform() - DEBUG: Position after offset: {finalPosition}", false);
         
         // STEP 2: Calculate optimal distance based on actual brick and stud geometry
         Vector3 currentBrickCenter = finalPosition;
         float distanceFromTargetStudToOurBrick = Vector3.Distance(currentBrickCenter, targetStudWorldPos);
         
-        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Distance from target stud to our brick center: {distanceFromTargetStudToOurBrick:F3}");
+        brick.LogDebug($"CalculateSnapTransform() - DEBUG: Distance from target stud to our brick center: {distanceFromTargetStudToOurBrick:F3}", false);
         
         // Calculate the optimal distance: target stud to our brick center = our stud to our brick center + tolerance
         float ourStudToBrickCenterDistance = Vector3.Distance(ourStud.transform.position, brick.transform.position);
         float optimalDistance = ourStudToBrickCenterDistance + 0.001f; // 1mm tolerance
         
-        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Our stud to brick center distance: {ourStudToBrickCenterDistance:F3}");
-        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Optimal distance: {optimalDistance:F3}");
+        brick.LogDebug($"CalculateSnapTransform() - DEBUG: Our stud to brick center distance: {ourStudToBrickCenterDistance:F3}", false);
+        brick.LogDebug($"CalculateSnapTransform() - DEBUG: Optimal distance: {optimalDistance:F3}", false);
         
         // If the distance from target stud to our brick center is too large, adjust the position to bring them closer
         // while still maintaining the stud alignment
@@ -274,140 +285,190 @@ public class BrickSnappingSystem
             Vector3 proximityAdjustment = directionFromTargetStudToOurBrick * excessDistance;
             finalPosition -= proximityAdjustment;
             
-            Debug.Log($"[{brick.name}] CalculateSnapTransform() - Applied proximity adjustment: {proximityAdjustment}");
-            Debug.Log($"[{brick.name}] CalculateSnapTransform() - New distance from target stud to our brick center: {Vector3.Distance(finalPosition, targetStudWorldPos):F3}");
+            brick.LogDebug($"CalculateSnapTransform() - DEBUG: Applied proximity adjustment: {proximityAdjustment}", false);
+            brick.LogDebug($"CalculateSnapTransform() - DEBUG: New distance from target stud to our brick center: {Vector3.Distance(finalPosition, targetStudWorldPos):F3}", false);
         }
         else
         {
-            Debug.Log($"[{brick.name}] CalculateSnapTransform() - Distance is already optimal, no proximity adjustment needed");
+            brick.LogDebug($"CalculateSnapTransform() - Distance is already optimal, no proximity adjustment needed", true);
         }
         
-        // STEP 3: Calculate final rotation by adjusting only Z-axis (max 45°)
-        // Use the released brick's current rotation as the starting point, then adjust Z-axis
-        // FIXED: finalRotation is already calculated above for position calculation
-        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Final rotation after Z-axis adjustment: {finalRotation.eulerAngles}");
+        // STEP 3: Log the final rotation (already calculated in Step 1)
+        // This step just logs the result for debugging purposes
+        brick.LogDebug($"CalculateSnapTransform() - DEBUG: Final rotation after 90° increment selection: {finalRotation.eulerAngles}", false);
         
-        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Final position: {finalPosition}, Rotation: {finalRotation.eulerAngles}");
+        brick.LogDebug($"CalculateSnapTransform() - Final position: {finalPosition}, Rotation: {finalRotation.eulerAngles}", true);
 
         // ADD DEBUGGING: Show expected snap point positions after transformation
         // Calculate where our stud will be after the brick is moved and rotated
         Vector3 expectedOurStudPosition = finalPosition + (finalRotation * ourStudLocalPos);
         
-        Debug.Log($"[{brick.name}] CalculateSnapTransform() - DEBUG: EXPECTED SNAP POINT ALIGNMENT:");
-        Debug.Log($"[{brick.name}] CalculateSnapTransform() - DEBUG: Expected our stud position: {expectedOurStudPosition}");
-        Debug.Log($"[{brick.name}] CalculateSnapTransform() - DEBUG: Target stud position: {targetStudWorldPos}");
-        Debug.Log($"[{brick.name}] CalculateSnapTransform() - DEBUG: Alignment difference: {expectedOurStudPosition - targetStudWorldPos}");
-        Debug.Log($"[{brick.name}] CalculateSnapTransform() - DEBUG: Alignment distance: {Vector3.Distance(expectedOurStudPosition, targetStudWorldPos):F6}");
+        brick.LogDebug($"CalculateSnapTransform() - DEBUG: EXPECTED SNAP POINT ALIGNMENT:", false);
+        brick.LogDebug($"CalculateSnapTransform() - DEBUG: Expected our stud position: {expectedOurStudPosition}", false);
+        brick.LogDebug($"CalculateSnapTransform() - DEBUG: Target stud position: {targetStudWorldPos}", false);
+        brick.LogDebug($"CalculateSnapTransform() - DEBUG: Alignment difference: {expectedOurStudPosition - targetStudWorldPos}", false);
+        brick.LogDebug($"CalculateSnapTransform() - DEBUG: Alignment distance: {Vector3.Distance(expectedOurStudPosition, targetStudWorldPos):F6}", false);
 
         targetSnapPosition = finalPosition;
         targetSnapRotation = finalRotation;
         
-        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Set targetSnapPosition: {targetSnapPosition}");
-        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Set targetSnapRotation: {targetSnapRotation.eulerAngles}");
+        brick.LogDebug($"CalculateSnapTransform() - Set targetSnapPosition: {targetSnapPosition}", true);
+        brick.LogDebug($"CalculateSnapTransform() - Set targetSnapRotation: {targetSnapRotation.eulerAngles}", true);
         
         // Debug visualization - draw lines to show the snap alignment
         Debug.DrawLine(ourStudWorldPos, targetStudWorldPos, Color.green, 2f);
         Debug.DrawLine(brick.transform.position, finalPosition, Color.red, 2f);
-        Debug.Log($"[{brick.name}] CalculateSnapTransform() - Debug lines drawn: Green=stud alignment, Red=brick movement");
+        brick.LogDebug($"CalculateSnapTransform() - DEBUG: Debug lines drawn: Green=stud alignment, Red=brick movement", false);
+        
+        // Add a crucial flow message for Lite Debug level
+        brick.LogDebug($"CalculateSnapTransform() - Snap transform calculated successfully");
     }
-    
-    // Method to adjust the Z-axis of the snapping brick to match the target brick's Z-axis
-    private Quaternion AdjustZAxisToMatchTarget(Quaternion releasedBrickRotation, BrickBehavior targetBrick)
+
+
+    // Method to align the released brick's local X-Y plane to the target brick's local X-Y plane
+    private Quaternion AlignXYPlanes(Quaternion releasedBrickRotation, BrickBehavior targetBrick)
     {
         // Get the target brick's rotation
         Quaternion targetRotation = targetBrick.transform.rotation;
         
-        // Calculate the relative rotation around the shared local Z-axis of the bricks
-        // This is the "twist" between two identically-tilted bricks
-        // Use Vector3.SignedAngle to compare the right vectors around world Z (which is their local Z)
-        Vector3 releasedRight = releasedBrickRotation * Vector3.right;  // The "+X" direction of released brick
-        Vector3 targetRight = targetRotation * Vector3.right;          // The "+X" direction of target brick
+        // Get the up vectors (Y-axis) of both bricks in world space
+        Vector3 releasedUp = releasedBrickRotation * Vector3.up;
+        Vector3 targetUp = targetRotation * Vector3.up;
         
-        // Calculate the signed angle from target's right-vector to released's right-vector around world Z
-        // This gives us how much the released brick is rotated relative to the target brick around their shared Z-axis
-        float relativeZ = Vector3.SignedAngle(targetRight, releasedRight, Vector3.forward);
+        // Get the forward vectors (Z-axis) of both bricks in world space
+        Vector3 releasedForward = releasedBrickRotation * Vector3.forward;
+        Vector3 targetForward = targetRotation * Vector3.forward;
         
-        // Vector3.SignedAngle already returns a value in the range -180° to +180°
+        brick.LogDebug($"AlignXYPlanes() - DEBUG: Released brick up vector: {releasedUp}", false);
+        brick.LogDebug($"AlignXYPlanes() - DEBUG: Target brick up vector: {targetUp}", false);
+        brick.LogDebug($"AlignXYPlanes() - DEBUG: Released brick forward vector: {releasedForward}", false);
+        brick.LogDebug($"AlignXYPlanes() - DEBUG: Target brick forward vector: {targetForward}", false);
         
-        Debug.Log($"[{brick.name}] AdjustZAxisToMatchTarget() - Relative rotation between bricks: {relativeZ:F1}°");
-        Debug.Log($"[{brick.name}] AdjustZAxisToMatchTarget() - Released brick right vector: {releasedRight}");
-        Debug.Log($"[{brick.name}] AdjustZAxisToMatchTarget() - Target brick right vector: {targetRight}");
+        // Calculate the rotation needed to align the up vectors
+        // This ensures both bricks are oriented in the same direction
+        Quaternion upAlignment = Quaternion.FromToRotation(releasedUp, targetUp);
         
-        // Snap to closest 90° increment
-        float snappedRelativeZ = Mathf.Round(relativeZ / 90f) * 90f;
+        // Apply the up alignment to the released brick's rotation
+        Quaternion alignedRotation = upAlignment * releasedBrickRotation;
         
-        // For LEGO bricks, we want to prefer 90° relative alignment over 0° alignment
-        // This is because LEGO bricks are typically arranged in 90° increments
-        if (Mathf.Abs(snappedRelativeZ) < 0.1f)
+        // Now align the forward vectors in the plane perpendicular to the up vector
+        Vector3 tempReleasedForward = alignedRotation * Vector3.forward;
+        Vector3 newReleasedRight = alignedRotation * Vector3.right;
+        
+        // Project the forward vectors onto the plane perpendicular to the up vector
+        Vector3 projectedReleasedForward = Vector3.ProjectOnPlane(tempReleasedForward, targetUp).normalized;
+        Vector3 projectedTargetForward = Vector3.ProjectOnPlane(targetForward, targetUp).normalized;
+        
+        // Calculate the rotation needed to align the projected forward vectors
+        Quaternion forwardAlignment = Quaternion.FromToRotation(projectedReleasedForward, projectedTargetForward);
+        
+        // Apply both alignments
+        Quaternion finalAlignedRotation = forwardAlignment * alignedRotation;
+        
+        brick.LogDebug($"AlignXYPlanes() - DEBUG: Up alignment quaternion: {upAlignment.eulerAngles}", false);
+        brick.LogDebug($"AlignXYPlanes() - DEBUG: Forward alignment quaternion: {forwardAlignment.eulerAngles}", false);
+        brick.LogDebug($"AlignXYPlanes() - DEBUG: Final aligned rotation: {finalAlignedRotation.eulerAngles}", false);
+        
+        // Validate the alignment
+        Vector3 newReleasedUp = finalAlignedRotation * Vector3.up;
+        Vector3 newReleasedForward = finalAlignedRotation * Vector3.forward;
+        
+        float upAlignmentError = Vector3.Angle(newReleasedUp, targetUp);
+        float forwardAlignmentError = Vector3.Angle(newReleasedForward, targetForward);
+        
+        brick.LogDebug($"AlignXYPlanes() - DEBUG: Up alignment error: {upAlignmentError:F1}°", false);
+        brick.LogDebug($"AlignXYPlanes() - DEBUG: Forward alignment error: {forwardAlignmentError:F1}°", false);
+        
+        if (upAlignmentError > 0.5f)
         {
-            // If we would snap to 0° (aligned), check if we should force 90° instead
-            // Force 90° if the original relative rotation is not very close to 0°
-            // Also force 90° if the relative rotation is ambiguous (between 5° and 45°)
-            if (Mathf.Abs(relativeZ) > 5f)
-            {
-                // Choose the direction that requires the least rotation
-                float clockwise90 = 90f;
-                float counterclockwise90 = -90f;
-                
-                // Use the direction that's closer to the original relative rotation
-                snappedRelativeZ = (Mathf.Abs(relativeZ - clockwise90) < Mathf.Abs(relativeZ - counterclockwise90)) ? clockwise90 : counterclockwise90;
-                
-                Debug.Log($"[{brick.name}] AdjustZAxisToMatchTarget() - Forced 90° relative alignment: {snappedRelativeZ:F1}° (chosen from {relativeZ:F1}°)");
-            }
-            else if (Mathf.Abs(relativeZ) > 2f)
-            {
-                // Even for small relative rotations, if they're not exactly 0°, prefer 90° alignment
-                // This handles cases where the bricks are "almost" aligned but should snap at 90°
-                float clockwise90 = 90f;
-                float counterclockwise90 = -90f;
-                
-                // Use the direction that's closer to the original relative rotation
-                snappedRelativeZ = (Mathf.Abs(relativeZ - clockwise90) < Mathf.Abs(relativeZ - counterclockwise90)) ? clockwise90 : counterclockwise90;
-                
-                Debug.Log($"[{brick.name}] AdjustZAxisToMatchTarget() - Forced 90° relative alignment for near-aligned bricks: {snappedRelativeZ:F1}° (chosen from {relativeZ:F1}°)");
-            }
-            else
-            {
-                Debug.Log($"[{brick.name}] AdjustZAxisToMatchTarget() - Bricks are truly aligned (0° relative), keeping alignment");
-            }
+            brick.LogWarning($"AlignXYPlanes() - WARNING: Up alignment error is {upAlignmentError:F1}° (should be < 0.5°)", true);
+        }
+        else
+        {
+            brick.LogDebug($"AlignXYPlanes() - Up alignment successful (error: {upAlignmentError:F1}°)", true);
         }
         
-        // Apply the snapped relative rotation to the target brick's rotation
-        Quaternion zAdjustment = Quaternion.Euler(0f, 0f, snappedRelativeZ);
-        Quaternion finalRotation = targetRotation * zAdjustment;
+        if (forwardAlignmentError > 0.5f)
+        {
+            brick.LogWarning($"AlignXYPlanes() - WARNING: Forward alignment error is {forwardAlignmentError:F1}° (should be < 0.5°)", true);
+        }
+        else
+        {
+            brick.LogDebug($"AlignXYPlanes() - Forward alignment successful (error: {forwardAlignmentError:F1}°)", true);
+        }
         
-        Debug.Log($"[{brick.name}] AdjustZAxisToMatchTarget() - Original relative Z: {relativeZ:F1}° → snapped to: {snappedRelativeZ:F1}°");
-        Debug.Log($"[{brick.name}] AdjustZAxisToMatchTarget() - Final relative rotation will be: {snappedRelativeZ:F1}°");
+        return finalAlignedRotation;
+    }
+
+    // Method to find the closest 90° increment relative to aligned rotation using quaternions and SignedAngle
+    private Quaternion FindClosest90DegreeIncrement(Quaternion originalRotation, Quaternion alignedRotation)
+    {
+        brick.LogDebug($"FindClosest90DegreeIncrement() - DEBUG: Original rotation: {originalRotation.eulerAngles}", false);
+        brick.LogDebug($"FindClosest90DegreeIncrement() - DEBUG: Aligned rotation: {alignedRotation.eulerAngles}", false);
         
-        // Additional debugging to understand the rotation calculation
-        Debug.Log($"[{brick.name}] AdjustZAxisToMatchTarget() - Released brick rotation: {releasedBrickRotation.eulerAngles}");
-        Debug.Log($"[{brick.name}] AdjustZAxisToMatchTarget() - Target brick rotation: {targetRotation.eulerAngles}");
-        Debug.Log($"[{brick.name}] AdjustZAxisToMatchTarget() - Final rotation: {finalRotation.eulerAngles}");
+        // Get the aligned rotation's local Z-axis (forward direction)
+        Vector3 alignedZAxis = alignedRotation * Vector3.forward;
         
-        return finalRotation;
+        // Create the 4 possible 90° increment rotations around the aligned rotation's Z-axis
+        Quaternion option1 = alignedRotation; // 0° (original aligned rotation)
+        Quaternion option2 = alignedRotation * Quaternion.AngleAxis(90f, Vector3.forward); // +90° around Z
+        Quaternion option3 = alignedRotation * Quaternion.AngleAxis(-90f, Vector3.forward); // -90° around Z
+        Quaternion option4 = alignedRotation * Quaternion.AngleAxis(180f, Vector3.forward); // 180° around Z
+        
+        brick.LogDebug($"FindClosest90DegreeIncrement() - DEBUG: Option 1 (0°): {option1.eulerAngles}", false);
+        brick.LogDebug($"FindClosest90DegreeIncrement() - DEBUG: Option 2 (+90°): {option2.eulerAngles}", false);
+        brick.LogDebug($"FindClosest90DegreeIncrement() - DEBUG: Option 3 (-90°): {option3.eulerAngles}", false);
+        brick.LogDebug($"FindClosest90DegreeIncrement() - DEBUG: Option 4 (180°): {option4.eulerAngles}", false);
+        
+        // Calculate signed angles between original rotation and each option
+        float angle1 = Quaternion.Angle(originalRotation, option1);
+        float angle2 = Quaternion.Angle(originalRotation, option2);
+        float angle3 = Quaternion.Angle(originalRotation, option3);
+        float angle4 = Quaternion.Angle(originalRotation, option4);
+        
+        brick.LogDebug($"FindClosest90DegreeIncrement() - DEBUG: Angle to option 1: {angle1:F1}°", false);
+        brick.LogDebug($"FindClosest90DegreeIncrement() - DEBUG: Angle to option 2: {angle2:F1}°", false);
+        brick.LogDebug($"FindClosest90DegreeIncrement() - DEBUG: Angle to option 3: {angle3:F1}°", false);
+        brick.LogDebug($"FindClosest90DegreeIncrement() - DEBUG: Angle to option 4: {angle4:F1}°", false);
+        
+        float[] angles = { angle1, angle2, angle3, angle4 };
+        Quaternion[] options = { option1, option2, option3, option4 };
+        string[] labels = { "option 1 (0°)", "option 2 (+90°)", "option 3 (-90°)", "option 4 (180°)" };
+
+        int minIndex = 0;
+        for (int i = 1; i < angles.Length; i++)
+        {
+            if (angles[i] < angles[minIndex]) minIndex = i;
+        }
+
+        Quaternion closestRotation = options[minIndex];
+        brick.LogDebug($"FindClosest90DegreeIncrement() - Selected {labels[minIndex]} with angle: {angles[minIndex]:F1}°", true);
+        brick.LogDebug($"FindClosest90DegreeIncrement() - Final closest rotation: {closestRotation.eulerAngles}", true);
+
+        return closestRotation;
     }
 
     public void FinalizeSnap()
     {
-        Debug.Log($"[{brick.name}] FinalizeSnap() - Finalizing snap connection");
-        Debug.Log($"[{brick.name}] FinalizeSnap() - DEBUG: isSnapping before finalization: {brick.isSnapping}");
+        brick.LogDebug($"FinalizeSnap() - Finalizing snap connection");
+        brick.LogDebug($"FinalizeSnap() - DEBUG: isSnapping before finalization: {brick.isSnapping}", false);
         
         // DEBUG: Log final position and physics state
-        Debug.Log($"[{brick.name}] FinalizeSnap() - DEBUG: Final brick position: {brick.transform.position}");
-        Debug.Log($"[{brick.name}] FinalizeSnap() - DEBUG: Final brick rotation: {brick.transform.rotation.eulerAngles}");
+        brick.LogDebug($"FinalizeSnap() - DEBUG: Final brick position: {brick.transform.position}", false);
+        brick.LogDebug($"FinalizeSnap() - DEBUG: Final brick rotation: {brick.transform.rotation.eulerAngles}", false);
         
         // ADDITIONAL DEBUG: Check if the position matches what was calculated
-        Debug.Log($"[{brick.name}] FinalizeSnap() - DEBUG: Expected target position was: {targetSnapPosition}");
-        Debug.Log($"[{brick.name}] FinalizeSnap() - DEBUG: Position difference: {Vector3.Distance(brick.transform.position, targetSnapPosition):F6}");
+        brick.LogDebug($"FinalizeSnap() - DEBUG: Expected target position was: {targetSnapPosition}", false);
+        brick.LogDebug($"FinalizeSnap() - DEBUG: Position difference: {Vector3.Distance(brick.transform.position, targetSnapPosition):F6}", false);
         
         var rb = brick.GetComponent<Rigidbody>();
         if (rb != null)
         {
-            Debug.Log($"[{brick.name}] FinalizeSnap() - DEBUG: Physics before finalization - isKinematic: {rb.isKinematic}, useGravity: {rb.useGravity}");
+            brick.LogDebug($" FinalizeSnap() - DEBUG: Physics before finalization - isKinematic: {rb.isKinematic}, useGravity: {rb.useGravity}", false);
         }
         
         brick.SetSnappingState(false, Vector3.zero, Quaternion.identity, null);
-        Debug.Log($"[{brick.name}] FinalizeSnap() - DEBUG: isSnapping after finalization: {brick.isSnapping}");
+        brick.LogDebug($" FinalizeSnap() - DEBUG: isSnapping after finalization: {brick.isSnapping}", false);
 
         // Reset stud states after snap is complete
         foreach (var stud in studManager.TopStuds)
@@ -419,7 +480,7 @@ public class BrickSnappingSystem
             stud.SetSnapping(false);
         }
         
-        Debug.Log($"[{brick.name}] FinalizeSnap() - Final position: {brick.transform.position}, Rotation: {brick.transform.rotation.eulerAngles}");
+        brick.LogDebug($" FinalizeSnap() - Final position: {brick.transform.position}, Rotation: {brick.transform.rotation.eulerAngles}");
 
         // Store target brick reference before clearing it
         BrickBehavior targetBrick = snapTargetBrick;
@@ -427,7 +488,7 @@ public class BrickSnappingSystem
         // Check if we have a valid target brick
         if (targetBrick == null)
         {
-            Debug.LogWarning($"[{brick.name}] FinalizeSnap() - WARNING: Target brick is null, cannot finalize snap");
+            brick.LogWarning($"[{brick.name}] FinalizeSnap() - WARNING: Target brick is null, cannot finalize snap");
             return;
         }
 
@@ -450,13 +511,13 @@ public class BrickSnappingSystem
         
         // IMPORTANT: Store the joint in the connection manager for proper group tracking
         brick.SetJoint(joint);
-        Debug.Log($"[{brick.name}] FinalizeSnap() - Stored joint in connection manager: {joint} connecting to {targetBrick.name}");
+        brick.LogDebug($" FinalizeSnap() - Stored joint in connection manager: {joint} connecting to {targetBrick.name}");
         
         // Set mass properties to make the connection more rigid
         if (brick.GetComponent<Rigidbody>() != null)
         {
             var brickRb = brick.GetComponent<Rigidbody>();
-            Debug.Log($"[{brick.name}] FinalizeSnap() - DEBUG: Physics before joint creation - isKinematic: {brickRb.isKinematic}, useGravity: {brickRb.useGravity}");
+            brick.LogDebug($" FinalizeSnap() - DEBUG: Physics before joint creation - isKinematic: {brickRb.isKinematic}, useGravity: {brickRb.useGravity}", false);
             
             // Normalize mass to prevent group weight accumulation
             brickRb.mass = 1.0f; // Fixed mass regardless of group size
@@ -467,8 +528,8 @@ public class BrickSnappingSystem
             // IMPORTANT: Restore physics after snap animation
             brickRb.isKinematic = false;
             brickRb.useGravity = true;
-            Debug.Log($"[{brick.name}] FinalizeSnap() - Restored physics: isKinematic=false, useGravity=true");
-            Debug.Log($"[{brick.name}] FinalizeSnap() - DEBUG: Physics after restoration - isKinematic: {brickRb.isKinematic}, useGravity: {brickRb.useGravity}, mass: {brickRb.mass}");
+            brick.LogDebug($" FinalizeSnap() - Restored physics: isKinematic=false, useGravity=true");
+            brick.LogDebug($" FinalizeSnap() - DEBUG: Physics after restoration - isKinematic: {brickRb.isKinematic}, useGravity: {brickRb.useGravity}, mass: {brickRb.mass}", false);
         }
         
     // IMPORTANT: Also restore physics on target brick
@@ -480,7 +541,7 @@ public class BrickSnappingSystem
         targetRb.mass = 1.0f; // Normalize mass to prevent group weight accumulation
         targetRb.linearDamping = brick.brickDrag;
         targetRb.angularDamping = brick.brickAngularDrag;
-        Debug.Log($"[{brick.name}] FinalizeSnap() - Restored physics on target brick: isKinematic=false, useGravity=true");
+        brick.LogDebug($" FinalizeSnap() - Restored physics on target brick: isKinematic=false, useGravity=true");
         }
 
         // This brick is no longer its own master. It's now a "slave" to the other group
@@ -495,13 +556,18 @@ public class BrickSnappingSystem
 
         // Validate and correct final alignment (now using stored reference)
         ValidateAndCorrectAlignment(targetBrick);
+        
+        // IMPORTANT: Force the brick to the exact target rotation after physics is re-enabled
+        // This ensures the brick doesn't drift due to physics calculations
+        brick.transform.rotation = targetSnapRotation;
+        brick.LogDebug($"FinalizeSnap() - DEBUG: FORCED brick to exact target rotation: {targetSnapRotation.eulerAngles}", false);
 
         // Clear any residual velocities to prevent oscillation
         if (brick.GetComponent<Rigidbody>() != null)
         {
             brick.GetComponent<Rigidbody>().linearVelocity = Vector3.zero;
             brick.GetComponent<Rigidbody>().angularVelocity = Vector3.zero;
-            Debug.Log($"[{brick.name}] FinalizeSnap() - Cleared velocities to prevent oscillation");
+            brick.LogDebug($" FinalizeSnap() - Cleared velocities to prevent oscillation");
         }
         
         // IMPORTANT: Don't call physics managers during snap finalization
@@ -511,13 +577,13 @@ public class BrickSnappingSystem
         // Start a coroutine to stabilize the group after a short delay
         brick.StartCoroutine(StabilizeGroupAfterSnap());
         
-        Debug.Log($"[{brick.name}] FinalizeSnap() - Snap finalization complete");
+        brick.LogDebug($" FinalizeSnap() - Snap finalization complete");
     }
 
     // Method to validate and correct alignment after snapping
     private void ValidateAndCorrectAlignment(BrickBehavior targetBrick)
     {
-        Debug.Log($"[{brick.name}] ValidateAndCorrectAlignment() - Validating final alignment");
+        brick.LogDebug($" ValidateAndCorrectAlignment() - Validating final alignment");
         
         // Find the closest stud pair to validate alignment
         float minDistance = float.MaxValue;
@@ -553,38 +619,43 @@ public class BrickSnappingSystem
             }
         }
         
-        Debug.Log($"[{brick.name}] ValidateAndCorrectAlignment() - Closest stud pair: {closestOurStud?.name} to {closestTargetStud?.name}, distance: {minDistance}");
+        brick.LogDebug($" ValidateAndCorrectAlignment() - Closest stud pair: {closestOurStud?.name} to {closestTargetStud?.name}, distance: {minDistance}");
         
         // ADD DETAILED SNAP POINT ALIGNMENT DEBUGGING
         if (closestOurStud != null && closestTargetStud != null)
         {
-            Debug.Log($"[{brick.name}] ValidateAndCorrectAlignment() - DEBUG: DETAILED ALIGNMENT CHECK:");
-            Debug.Log($"[{brick.name}] ValidateAndCorrectAlignment() - DEBUG: Our stud '{closestOurStud.name}' position: {closestOurStud.transform.position}");
-            Debug.Log($"[{brick.name}] ValidateAndCorrectAlignment() - DEBUG: Target stud '{closestTargetStud.name}' position: {closestTargetStud.transform.position}");
-            Debug.Log($"[{brick.name}] ValidateAndCorrectAlignment() - DEBUG: Position difference: {closestOurStud.transform.position - closestTargetStud.transform.position}");
-            Debug.Log($"[{brick.name}] ValidateAndCorrectAlignment() - DEBUG: Distance: {minDistance:F6}");
-            Debug.Log($"[{brick.name}] ValidateAndCorrectAlignment() - DEBUG: Snap tolerance: {brick.snapTolerance:F6}");
-            Debug.Log($"[{brick.name}] ValidateAndCorrectAlignment() - DEBUG: Our brick position: {brick.transform.position}");
-            Debug.Log($"[{brick.name}] ValidateAndCorrectAlignment() - DEBUG: Target brick position: {targetBrick.transform.position}");
-            Debug.Log($"[{brick.name}] ValidateAndCorrectAlignment() - DEBUG: Our brick rotation: {brick.transform.rotation.eulerAngles}");
-            Debug.Log($"[{brick.name}] ValidateAndCorrectAlignment() - DEBUG: Target brick rotation: {targetBrick.transform.rotation.eulerAngles}");
-        }
-        
-        // REMOVED: Position correction logic that was causing incorrect positioning
-        // The snap calculation already positions the brick correctly for stud alignment
-        // Adding additional corrections was causing the bricks to end up in wrong positions
-        // Instead, just log the alignment status for debugging
-        
-        if (closestOurStud != null && closestTargetStud != null)
-        {
-            if (minDistance > brick.snapTolerance * 2f)
+            brick.LogDebug($" ValidateAndCorrectAlignment() - DEBUG: DETAILED ALIGNMENT CHECK:", false);
+            brick.LogDebug($" ValidateAndCorrectAlignment() - DEBUG: Our stud '{closestOurStud.name}' position: {closestOurStud.transform.position}", false);
+            brick.LogDebug($" ValidateAndCorrectAlignment() - DEBUG: Target stud '{closestTargetStud.name}' position: {closestTargetStud.transform.position}", false);
+            brick.LogDebug($" ValidateAndCorrectAlignment() - DEBUG: Position difference: {closestOurStud.transform.position - closestTargetStud.transform.position}", false);
+            brick.LogDebug($" ValidateAndCorrectAlignment() - DEBUG: Distance: {minDistance:F6}", false);
+            brick.LogDebug($" ValidateAndCorrectAlignment() - DEBUG: Snap tolerance: {brick.snapTolerance:F6}", false);
+            brick.LogDebug($" ValidateAndCorrectAlignment() - DEBUG: Our brick position: {brick.transform.position}", false);
+            brick.LogDebug($" ValidateAndCorrectAlignment() - DEBUG: Target brick position: {targetBrick.transform.position}", false);
+            brick.LogDebug($" ValidateAndCorrectAlignment() - DEBUG: Our brick rotation: {brick.transform.rotation.eulerAngles}", false);
+            brick.LogDebug($" ValidateAndCorrectAlignment() - DEBUG: Target brick rotation: {targetBrick.transform.rotation.eulerAngles}", false);
+            
+            // Check if our brick rotation has drifted from the target snap rotation
+            float rotationDrift = Quaternion.Angle(brick.transform.rotation, targetSnapRotation);
+            if (rotationDrift > 1f) // More than 1 degree of drift
             {
-                Debug.LogWarning($"[{brick.name}] ValidateAndCorrectAlignment() - WARNING: Alignment significantly off by {minDistance}, but not correcting to avoid position issues");
+                brick.LogWarning($"ValidateAndCorrectAlignment() - WARNING: Brick rotation has drifted by {rotationDrift:F2}° from target!", true);
+                brick.LogWarning($"ValidateAndCorrectAlignment() - Target was: {targetSnapRotation.eulerAngles}, Current is: {brick.transform.rotation.eulerAngles}", true);
             }
             else
             {
-                Debug.Log($"[{brick.name}] ValidateAndCorrectAlignment() - Alignment is good, distance: {minDistance}");
+                brick.LogDebug($"ValidateAndCorrectAlignment() - Rotation drift check: {rotationDrift:F2}° (acceptable)", true);
             }
+        }
+        
+        // Check if alignment is within tolerance
+        if (minDistance > brick.snapTolerance * 2f)
+        {
+            brick.LogWarning($"[{brick.name}] ValidateAndCorrectAlignment() - WARNING: Alignment significantly off by {minDistance}, but not correcting to avoid position issues");
+        }
+        else
+        {
+            brick.LogDebug($" ValidateAndCorrectAlignment() - Alignment is good, distance: {minDistance}");
         }
     }
 
@@ -595,7 +666,7 @@ public class BrickSnappingSystem
         // Get all studs on the target brick that are compatible with our stud
         List<Stud> targetStuds = (ourStud.Type == Stud.StudType.Top) ? targetBrick.BottomStuds : targetBrick.TopStuds;
         
-        Debug.Log($"[{brick.name}] FindPotentialSnapPoints() - Looking for {ourStud.Type} studs on target brick ({targetStuds.Count} found)");
+        brick.LogDebug($" FindPotentialSnapPoints() - Looking for {ourStud.Type} studs on target brick ({targetStuds.Count} found)");
         
         // First, find all studs within a reasonable detection range
         List<Stud> nearbyStuds = new List<Stud>();
@@ -611,7 +682,7 @@ public class BrickSnappingSystem
             }
         }
         
-        Debug.Log($"[{brick.name}] FindPotentialSnapPoints() - Found {nearbyStuds.Count} nearby studs");
+        brick.LogDebug($" FindPotentialSnapPoints() - Found {nearbyStuds.Count} nearby studs");
         
         // Now check if any of these nearby studs are already occupied
         foreach (var nearbyStud in nearbyStuds)
@@ -626,18 +697,18 @@ public class BrickSnappingSystem
         // For partial connections (like 1x2 overlap), we need to check if this creates a valid connection
         if (potentialPoints.Count > 0)
         {
-            Debug.Log($"[{brick.name}] FindPotentialSnapPoints() - Found {potentialPoints.Count} available snap points");
+            brick.LogDebug($" FindPotentialSnapPoints() - Found {potentialPoints.Count} available snap points");
             
             // Check if this would create a valid partial connection
             if (potentialPoints.Count < brick.minRequiredConnections)
             {
-                Debug.LogWarning($"[{brick.name}] FindPotentialSnapPoints() - WARNING: Only {potentialPoints.Count} snap points found, minimum required: {brick.minRequiredConnections}");
+                brick.LogWarning($"[{brick.name}] FindPotentialSnapPoints() - WARNING: Only {potentialPoints.Count} snap points found, minimum required: {brick.minRequiredConnections}");
                 // Don't clear the list, let the calling method decide
             }
         }
         else
         {
-            Debug.Log($"[{brick.name}] FindPotentialSnapPoints() - No available snap points found (all nearby studs are occupied)");
+            brick.LogDebug($" FindPotentialSnapPoints() - No available snap points found (all nearby studs are occupied)");
         }
         
         return potentialPoints;
@@ -660,7 +731,7 @@ public class BrickSnappingSystem
                 float distance = Vector3.Distance(stud.transform.position, connectedStud.transform.position);
                 if (distance < brick.snapTolerance * 0.5f) // Very close - likely the same stud
                 {
-                    Debug.Log($"[{brick.name}] IsStudOccupied() - Stud {stud.name} is occupied by {connectedBrick.name}");
+                    brick.LogDebug($" IsStudOccupied() - Stud {stud.name} is occupied by {connectedBrick.name}");
                     return true;
                 }
             }
@@ -680,11 +751,11 @@ public class BrickSnappingSystem
         Stud bestStud = null;
         float bestDistance = float.MaxValue;
         
-        Debug.Log($"[{brick.name}] ChooseBestSnapPoint() - Choosing from {potentialPoints.Count} potential points");
+        brick.LogDebug($" ChooseBestSnapPoint() - Choosing from {potentialPoints.Count} potential points");
         
         if (potentialPoints.Count == 0)
         {
-            Debug.LogWarning($"[{brick.name}] ChooseBestSnapPoint() - WARNING: No potential points provided!");
+            brick.LogWarning($"[{brick.name}] ChooseBestSnapPoint() - WARNING: No potential points provided!");
             return null;
         }
         
@@ -692,7 +763,7 @@ public class BrickSnappingSystem
         {
             bestStud = potentialPoints[0];
             bestDistance = Vector3.Distance(ourStud.transform.position, bestStud.transform.position);
-            Debug.Log($"[{brick.name}] ChooseBestSnapPoint() - Only one potential point, selecting {bestStud.name}");
+            brick.LogDebug($" ChooseBestSnapPoint() - Only one potential point, selecting {bestStud.name}");
             return bestStud;
         }
         
@@ -710,17 +781,17 @@ public class BrickSnappingSystem
         
         if (bestStud != null)
         {
-            Debug.Log($"[{brick.name}] ChooseBestSnapPoint() - Selected {bestStud.name} with distance {bestDistance:F3}");
+            brick.LogDebug($" ChooseBestSnapPoint() - Selected {bestStud.name} with distance {bestDistance:F3}");
             
             // Additional validation: ensure the selected point is within reasonable distance
             if (bestDistance > brick.snapTolerance * 2f)
             {
-                Debug.LogWarning($"[{brick.name}] ChooseBestSnapPoint() - WARNING: Best snap point is quite far: {bestDistance:F3} > {brick.snapTolerance * 2f:F3}");
+                brick.LogWarning($"[{brick.name}] ChooseBestSnapPoint() - WARNING: Best snap point is quite far: {bestDistance:F3} > {brick.snapTolerance * 2f:F3}");
             }
         }
         else
         {
-            Debug.LogWarning($"[{brick.name}] ChooseBestSnapPoint() - WARNING: No valid snap point found!");
+            brick.LogWarning($"[{brick.name}] ChooseBestSnapPoint() - WARNING: No valid snap point found!");
         }
         
         return bestStud;
@@ -729,7 +800,7 @@ public class BrickSnappingSystem
     // Method to find the best alignment for multiple stud connections
     private Stud FindBestMultiStudAlignment(Stud ourStud, List<Stud> potentialPoints, BrickBehavior targetBrick)
     {
-        Debug.Log($"[{brick.name}] FindBestMultiStudAlignment() - Finding best alignment for {potentialPoints.Count} potential points");
+        brick.LogDebug($" FindBestMultiStudAlignment() - Finding best alignment for {potentialPoints.Count} potential points");
         
         Stud bestTargetStud = null;
         int maxConnectingStuds = 0;
@@ -738,7 +809,7 @@ public class BrickSnappingSystem
         // Try each potential target stud as the primary connection point
         foreach (var primaryTargetStud in potentialPoints)
         {
-            Debug.Log($"[{brick.name}] FindBestMultiStudAlignment() - Testing primary target: {primaryTargetStud.name}");
+            brick.LogDebug($" FindBestMultiStudAlignment() - Testing primary target: {primaryTargetStud.name}");
             
             // Calculate the position our brick would be in if we connected to this stud
             Vector3 testPosition = CalculateTestPosition(ourStud, primaryTargetStud, targetBrick);
@@ -747,7 +818,7 @@ public class BrickSnappingSystem
             // Count how many of our studs would connect to target studs at this position
             int connectingStuds = CountConnectingStuds(testPosition, testRotation, targetBrick);
             
-            Debug.Log($"[{brick.name}] FindBestMultiStudAlignment() - Position {testPosition} would connect {connectingStuds} studs");
+            brick.LogDebug($" FindBestMultiStudAlignment() - Position {testPosition} would connect {connectingStuds} studs");
             
             // Prefer more connecting studs, then closer distance
             if (connectingStuds > maxConnectingStuds || 
@@ -756,17 +827,17 @@ public class BrickSnappingSystem
                 maxConnectingStuds = connectingStuds;
                 bestDistance = Vector3.Distance(ourStud.transform.position, primaryTargetStud.transform.position);
                 bestTargetStud = primaryTargetStud;
-                Debug.Log($"[{brick.name}] FindBestMultiStudAlignment() - New best: {primaryTargetStud.name} with {connectingStuds} connections");
+                brick.LogDebug($" FindBestMultiStudAlignment() - New best: {primaryTargetStud.name} with {connectingStuds} connections");
             }
         }
         
         if (bestTargetStud != null)
         {
-            Debug.Log($"[{brick.name}] FindBestMultiStudAlignment() - Selected {bestTargetStud.name} with {maxConnectingStuds} connecting studs");
+            brick.LogDebug($" FindBestMultiStudAlignment() - Selected {bestTargetStud.name} with {maxConnectingStuds} connecting studs");
         }
         else
         {
-            Debug.LogWarning($"[{brick.name}] FindBestMultiStudAlignment() - WARNING: No good multi-stud alignment found");
+            brick.LogWarning($"[{brick.name}] FindBestMultiStudAlignment() - WARNING: No good multi-stud alignment found");
         }
         
         return bestTargetStud;
@@ -826,13 +897,13 @@ public class BrickSnappingSystem
             }
         }
         
-        Debug.Log($"[{brick.name}] CountConnectingStuds() - Found {connectingCount} connecting studs");
+        brick.LogDebug($" CountConnectingStuds() - Found {connectingCount} connecting studs");
         return connectingCount;
     }
 
     private IEnumerator StabilizeGroupAfterSnap()
     {
-        Debug.Log($"[{brick.name}] StabilizeGroupAfterSnap() - Starting group stabilization after snap");
+        brick.LogDebug($" StabilizeGroupAfterSnap() - Starting group stabilization after snap");
         
         // Wait a short delay to let physics settle
         yield return new WaitForSeconds(0.1f);
@@ -841,7 +912,7 @@ public class BrickSnappingSystem
         List<BrickBehavior> groupBricks = new List<BrickBehavior>();
         BrickGroupUtils.FindAllConnectedInGroup(brick, groupBricks, brick.name);
         
-        Debug.Log($"[{brick.name}] StabilizeGroupAfterSnap() - Found {groupBricks.Count} bricks in group to stabilize");
+        brick.LogDebug($" StabilizeGroupAfterSnap() - Found {groupBricks.Count} bricks in group to stabilize");
         
         // Stabilize each brick in the group
         foreach (var groupBrick in groupBricks)
@@ -856,11 +927,11 @@ public class BrickSnappingSystem
                 groupBrick.GetComponent<Rigidbody>().isKinematic = false;
                 groupBrick.GetComponent<Rigidbody>().useGravity = true;
                 
-                Debug.Log($"[{brick.name}] StabilizeGroupAfterSnap() - Stabilized {groupBrick.name}");
+                brick.LogDebug($" StabilizeGroupAfterSnap() - Stabilized {groupBrick.name}");
             }
         }
         
-        Debug.Log($"[{brick.name}] StabilizeGroupAfterSnap() - Group stabilization complete");
+        brick.LogDebug($" StabilizeGroupAfterSnap() - Group stabilization complete");
     }
 
     public void Cleanup()
@@ -870,6 +941,6 @@ public class BrickSnappingSystem
         targetSnapPosition = Vector3.zero;
         targetSnapRotation = Quaternion.identity;
         
-        Debug.Log($"[{brick.name}] Cleanup() - Snap system cleanup complete");
+        brick.LogDebug($" Cleanup() - Snap system cleanup complete");
     }
 } 

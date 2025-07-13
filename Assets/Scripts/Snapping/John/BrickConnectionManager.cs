@@ -42,51 +42,51 @@ public class BrickConnectionManager
         // Initialize connection graph
         m_MasterBrick = brick;
         m_OriginalMaster = brick; // Initially, each brick is its own original master
-        Debug.Log($"[{brick.name}] InitializeConnectionGraph() - Initialized as own master brick");
+        brick.LogDebug($"InitializeConnectionGraph() - Initialized as own master brick");
     }
 
     public void OnGrabStarted(IXRSelectInteractor interactor)
     {
-        Debug.Log($"[{brick.name}] OnGrabStarted() - Handling grab start in connection manager");
+        brick.LogDebug($"OnGrabStarted() - Handling grab start in connection manager");
         
         // Find all bricks in the connected group
         List<BrickBehavior> groupBricks = new List<BrickBehavior>();
         BrickGroupUtils.FindAllConnectedInGroup(brick, groupBricks, brick.name);
-        Debug.Log($"[{brick.name}] OnGrabStarted() - Found {groupBricks.Count} bricks in group");
+        brick.LogDebug($"OnGrabStarted() - Found {groupBricks.Count} bricks in group");
         
         // Store the original master before any changes
         BrickBehavior originalMaster = brick.MasterBrick;
-        Debug.Log($"[{brick.name}] OnGrabStarted() - Original master: {originalMaster?.name ?? "null"}");
+        brick.LogDebug($"OnGrabStarted() - Original master: {originalMaster?.name ?? "null"}");
         
         // Update the master for all bricks in the group to the grabbed brick
         UpdateMaster(brick);
         
-        Debug.Log($"[{brick.name}] OnGrabStarted() - Grab start handling complete");
+        brick.LogDebug($"OnGrabStarted() - Grab start handling complete");
     }
 
     public void OnGrabReleased()
     {
-        Debug.Log($"[{brick.name}] OnGrabReleased() - Handling grab release in connection manager");
+        brick.LogDebug($"OnGrabReleased() - Handling grab release in connection manager");
         
         // Find all bricks in the connected group
         List<BrickBehavior> groupBricks = new List<BrickBehavior>();
         BrickGroupUtils.FindAllConnectedInGroup(brick, groupBricks, brick.name);
-        Debug.Log($"[{brick.name}] OnGrabReleased() - Found {groupBricks.Count} bricks in group");
+        brick.LogDebug($"OnGrabReleased() - Found {groupBricks.Count} bricks in group");
         
         // Restore the original master
         BrickBehavior originalMaster = brick.OriginalMaster;
-        Debug.Log($"[{brick.name}] OnGrabReleased() - Restoring original master: {originalMaster?.name ?? "null"}");
+        brick.LogDebug($"OnGrabReleased() - Restoring original master: {originalMaster?.name ?? "null"}");
         
         // DO NOT change physics here - let UpdateMaster handle it properly
         UpdateMaster(originalMaster);
         
-        Debug.Log($"[{brick.name}] OnGrabReleased() - Grab release handling complete");
+        brick.LogDebug($"OnGrabReleased() - Grab release handling complete");
     }
 
     // Coroutine to stabilize the group after release
     private System.Collections.IEnumerator StabilizeGroupAfterRelease(List<BrickBehavior> groupBricks)
     {
-        Debug.Log($"[{brick.name}] StabilizeGroupAfterRelease() - Starting group stabilization");
+        brick.LogDebug($"StabilizeGroupAfterRelease() - Starting group stabilization");
         
         // Wait a frame to let physics settle
         yield return null;
@@ -104,11 +104,11 @@ public class BrickConnectionManager
                 groupBrick.GetComponent<Rigidbody>().linearVelocity = Vector3.zero;
                 groupBrick.GetComponent<Rigidbody>().angularVelocity = Vector3.zero;
                 
-                Debug.Log($"[{brick.name}] StabilizeGroupAfterRelease() - Stabilized {groupBrick.name}: isKinematic=false, useGravity=true, cleared velocities");
+                brick.LogDebug($"StabilizeGroupAfterRelease() - Stabilized {groupBrick.name}: isKinematic=false, useGravity=true, cleared velocities");
             }
         }
         
-        Debug.Log($"[{brick.name}] StabilizeGroupAfterRelease() - Group stabilization complete");
+        brick.LogDebug($"StabilizeGroupAfterRelease() - Group stabilization complete");
     }
 
     public void UpdateMaster(BrickBehavior newMaster)
@@ -116,24 +116,24 @@ public class BrickConnectionManager
         // Prevent recursive calls - if we're already updating to this master, skip
         if (m_MasterBrick == newMaster)
         {
-            Debug.Log($"[{brick.name}] UpdateMaster() - Already master of {newMaster.name}, skipping update");
+            brick.LogDebug($"UpdateMaster() - Already master of {newMaster.name}, skipping update");
             return;
         }
         
-        Debug.Log($"[{brick.name}] UpdateMaster() - Updating group master to: {newMaster.name}");
+        brick.LogDebug($"UpdateMaster() - Updating group master to: {newMaster.name}");
         
         List<BrickBehavior> groupToUpdate = new List<BrickBehavior>();
-        Debug.Log($"[{brick.name}] UpdateMaster() - Created group members list");
+        brick.LogDebug($"UpdateMaster() - Created group members list");
         
         BrickGroupUtils.FindAllConnectedInGroup(brick, groupToUpdate, brick.name);
-        Debug.Log($"[{brick.name}] UpdateMaster() - Found {groupToUpdate.Count} bricks in the group");
+        brick.LogDebug($"UpdateMaster() - Found {groupToUpdate.Count} bricks in the group");
 
         foreach (var groupBrick in groupToUpdate)
         {
-            Debug.Log($"[{brick.name}] UpdateMaster() - Processing brick: {groupBrick.name}");
+            brick.LogDebug($"UpdateMaster() - Processing brick: {groupBrick.name}");
             // Don't call groupBrick.UpdateMaster() as it would call this method again
             groupBrick.ConnectionManager.m_MasterBrick = newMaster;
-            Debug.Log($"[{brick.name}] UpdateMaster() - Set {groupBrick.name}'s master to {newMaster.name}");
+            brick.LogDebug($"UpdateMaster() - Set {groupBrick.name}'s master to {newMaster.name}");
             
             // Update the original master for the entire group
             // The original master should be the one that was originally its own master
@@ -161,38 +161,38 @@ public class BrickConnectionManager
             }
         }
         
-        Debug.Log($"[{brick.name}] UpdateMaster() - Master update complete");
+        brick.LogDebug($"UpdateMaster() - Master update complete");
     }
 
     public void UnsnapFrom(BrickBehavior otherBrick)
     {
-        Debug.Log($"[{brick.name}] UnsnapFrom() - Starting unsnap from {otherBrick.name}");
+        brick.LogDebug($"UnsnapFrom() - Starting unsnap from {otherBrick.name}");
 
         // Check for joint on this brick first
         if (m_Joint != null && m_Joint.connectedBody == otherBrick.GetComponent<Rigidbody>())
         {
-            Debug.Log($"[{brick.name}] UnsnapFrom() - Found joint on this brick. Destroying it.");
+            brick.LogDebug($"UnsnapFrom() - Found joint on this brick. Destroying it.");
             Object.DestroyImmediate(m_Joint);
             m_Joint = null;
         }
         // Check for joint on the other brick
         else if (otherBrick.Joint != null && otherBrick.Joint.connectedBody == brick.GetComponent<Rigidbody>())
         {
-            Debug.Log($"[{brick.name}] UnsnapFrom() - Found joint on other brick ({otherBrick.name}). Destroying it.");
+            brick.LogDebug($"UnsnapFrom() - Found joint on other brick ({otherBrick.name}). Destroying it.");
             Object.DestroyImmediate(otherBrick.Joint);
             // The joint destruction will handle clearing the reference
         }
         // If neither brick has the joint, search for any FixedJoint components
         else
         {
-            Debug.Log($"[{brick.name}] UnsnapFrom() - No tracked joint found, searching for FixedJoint components");
+            brick.LogDebug($"UnsnapFrom() - No tracked joint found, searching for FixedJoint components");
             
             FixedJoint[] joints = brick.GetComponents<FixedJoint>();
             foreach (var joint in joints)
             {
                 if (joint.connectedBody == otherBrick.GetComponent<Rigidbody>())
                 {
-                    Debug.Log($"[{brick.name}] UnsnapFrom() - Found joint via component search. Destroying it.");
+                    brick.LogDebug($"UnsnapFrom() - Found joint via component search. Destroying it.");
                     Object.DestroyImmediate(joint);
                     m_Joint = null;
                     break;
@@ -205,7 +205,7 @@ public class BrickConnectionManager
             {
                 if (joint.connectedBody == brick.GetComponent<Rigidbody>())
                 {
-                    Debug.Log($"[{brick.name}] UnsnapFrom() - Found joint on other brick via component search. Destroying it.");
+                    brick.LogDebug($"UnsnapFrom() - Found joint on other brick via component search. Destroying it.");
                     Object.DestroyImmediate(joint);
                     // The joint destruction will handle clearing the reference
                     break;
@@ -214,10 +214,10 @@ public class BrickConnectionManager
         }
         
         m_ConnectedNeighbors.Remove(otherBrick);
-        Debug.Log($"[{brick.name}] UnsnapFrom() - Removed {otherBrick.name} from this brick's neighbors");
+        brick.LogDebug($"UnsnapFrom() - Removed {otherBrick.name} from this brick's neighbors");
         
         otherBrick.RemoveNeighbor(brick);
-        Debug.Log($"[{brick.name}] UnsnapFrom() - Removed this brick from {otherBrick.name}'s neighbors");
+        brick.LogDebug($"UnsnapFrom() - Removed this brick from {otherBrick.name}'s neighbors");
 
         // Restore physics for this brick ONLY if it's not currently grabbed
         if (!brick.GetComponent<UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable>().isSelected)
@@ -228,11 +228,11 @@ public class BrickConnectionManager
             // Restore original mass to prevent weight accumulation after separation
             brick.GetComponent<Rigidbody>().mass = 1.0f;
             
-            Debug.Log($"[{brick.name}] UnsnapFrom() - Restored physics for this brick: isKinematic=false, useGravity=true, mass=1.0f");
+            brick.LogDebug($"UnsnapFrom() - Restored physics for this brick: isKinematic=false, useGravity=true, mass=1.0f");
         }
         else
         {
-            Debug.Log($"[{brick.name}] UnsnapFrom() - Skipping physics change for this brick (currently grabbed by XRGrabInteractable)");
+            brick.LogDebug($"UnsnapFrom() - Skipping physics change for this brick (currently grabbed by XRGrabInteractable)");
         }
         
         // IMPORTANT: Also restore physics for the other brick if it's not grabbed
@@ -242,33 +242,33 @@ public class BrickConnectionManager
             otherBrick.GetComponent<Rigidbody>().useGravity = true;
             otherBrick.GetComponent<Rigidbody>().mass = 1.0f;
             
-            Debug.Log($"[{brick.name}] UnsnapFrom() - Restored physics for other brick {otherBrick.name}: isKinematic=false, useGravity=true, mass=1.0f");
+            brick.LogDebug($"UnsnapFrom() - Restored physics for other brick {otherBrick.name}: isKinematic=false, useGravity=true, mass=1.0f");
         }
         else
         {
-            Debug.Log($"[{brick.name}] UnsnapFrom() - Skipping physics change for other brick {otherBrick.name} (currently grabbed by XRGrabInteractable)");
+            brick.LogDebug($"UnsnapFrom() - Skipping physics change for other brick {otherBrick.name} (currently grabbed by XRGrabInteractable)");
         }
         
         UpdateMaster(brick);
-        Debug.Log($"[{brick.name}] UnsnapFrom() - Called UpdateMaster to set this brick as its own master");
+        brick.LogDebug($"UnsnapFrom() - Called UpdateMaster to set this brick as its own master");
         
         if (otherBrick.ConnectedNeighbors.Count == 0)
         {
-            Debug.Log($"[{brick.name}] UnsnapFrom() - Other brick ({otherBrick.name}) now has no neighbors. It will become its own master.");
+            brick.LogDebug($"UnsnapFrom() - Other brick ({otherBrick.name}) now has no neighbors. It will become its own master.");
             otherBrick.UpdateMaster(otherBrick);
         }
         else
         {
-            Debug.Log($"[{brick.name}] UnsnapFrom() - Other brick ({otherBrick.name}) still has neighbors. Updating its master to the master of its first remaining neighbor.");
+            brick.LogDebug($"UnsnapFrom() - Other brick ({otherBrick.name}) still has neighbors. Updating its master to the master of its first remaining neighbor.");
             otherBrick.UpdateMaster(otherBrick.ConnectedNeighbors[0].MasterBrick);
         }
         
-        Debug.Log($"[{brick.name}] UnsnapFrom() - Unsnap complete");
+        brick.LogDebug($"UnsnapFrom() - Unsnap complete");
     }
 
     public void StrengthenGroupConnections()
     {
-        Debug.Log($"[{brick.name}] StrengthenGroupConnections() - Strengthening all connections in group");
+        brick.LogDebug($"StrengthenGroupConnections() - Strengthening all connections in group");
         
         // Find all bricks in the connected group
         List<BrickBehavior> groupBricks = new List<BrickBehavior>();
@@ -287,7 +287,7 @@ public class BrickConnectionManager
                 groupBrick.GetComponent<Rigidbody>().isKinematic = false;
                 groupBrick.GetComponent<Rigidbody>().useGravity = true;
                 
-                Debug.Log($"[{brick.name}] StrengthenGroupConnections() - Strengthened {groupBrick.name}: mass={groupBrick.GetComponent<Rigidbody>().mass}, drag={groupBrick.GetComponent<Rigidbody>().linearDamping}, angularDrag={groupBrick.GetComponent<Rigidbody>().angularDamping}");
+                brick.LogDebug($"StrengthenGroupConnections() - Strengthened {groupBrick.name}: mass={groupBrick.GetComponent<Rigidbody>().mass}, drag={groupBrick.GetComponent<Rigidbody>().linearDamping}, angularDrag={groupBrick.GetComponent<Rigidbody>().angularDamping}");
             }
             
             // Strengthen any joints on this brick
@@ -301,11 +301,11 @@ public class BrickConnectionManager
                 joint.anchor = Vector3.zero;
                 joint.axis = Vector3.zero;
                 
-                Debug.Log($"[{brick.name}] StrengthenGroupConnections() - Strengthened joint on {groupBrick.name}");
+                brick.LogDebug($"StrengthenGroupConnections() - Strengthened joint on {groupBrick.name}");
             }
         }
         
-        Debug.Log($"[{brick.name}] StrengthenGroupConnections() - Group strengthening complete");
+        brick.LogDebug($"StrengthenGroupConnections() - Group strengthening complete");
     }
 
     public void RemoveNeighbor(BrickBehavior neighbor)
@@ -313,7 +313,7 @@ public class BrickConnectionManager
         if (m_ConnectedNeighbors.Contains(neighbor))
         {
             m_ConnectedNeighbors.Remove(neighbor);
-            Debug.Log($"[{brick.name}] RemoveNeighbor() - Removed {neighbor.name} from neighbors");
+            brick.LogDebug($"RemoveNeighbor() - Removed {neighbor.name} from neighbors");
         }
     }
 
@@ -322,7 +322,7 @@ public class BrickConnectionManager
         // Clean up any remaining joints
         if (m_Joint != null)
         {
-            Debug.Log($"[{brick.name}] Cleanup() - Destroying tracked joint");
+            brick.LogDebug($"Cleanup() - Destroying tracked joint");
             Object.DestroyImmediate(m_Joint);
             m_Joint = null;
         }
@@ -331,7 +331,7 @@ public class BrickConnectionManager
         FixedJoint[] joints = brick.GetComponents<FixedJoint>();
         foreach (var joint in joints)
         {
-            Debug.Log($"[{brick.name}] Cleanup() - Destroying untracked joint: {joint.name}");
+            brick.LogDebug($"Cleanup() - Destroying untracked joint: {joint.name}");
             Object.DestroyImmediate(joint);
         }
         
@@ -343,7 +343,7 @@ public class BrickConnectionManager
 
     public void SetJoint(FixedJoint joint)
     {
-        Debug.Log($"[{brick.name}] SetJoint() - Setting joint: {joint}");
+        brick.LogDebug($"SetJoint() - Setting joint: {joint}");
         m_Joint = joint;
     }
 } 

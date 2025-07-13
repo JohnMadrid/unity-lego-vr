@@ -41,39 +41,24 @@ public static class BrickGroupUtils
     {
         if (brick == null || visited.Contains(brick))
         {
-            if (!string.IsNullOrEmpty(context))
-            {
-                Debug.Log($"[{context}] FindAllConnectedInGroup() - Brick is null or already visited, returning");
-            }
+            brick.LogDebug($"FindAllConnectedInGroup() - DEBUG: Brick is null or already visited, returning", false);
             return;
         }
         
-        if (!string.IsNullOrEmpty(context))
-        {
-            Debug.Log($"[{context}] FindAllConnectedInGroup() - Visiting brick: {brick.name}");
-        }
+        brick.LogDebug($"FindAllConnectedInGroup() - Visiting brick: {brick.name}");
         
         visited.Add(brick);
         
-        if (!string.IsNullOrEmpty(context))
-        {
-            Debug.Log($"[{context}] FindAllConnectedInGroup() - Added {brick.name} to visited list. Total visited: {visited.Count}");
-        }
+        brick.LogDebug($"FindAllConnectedInGroup() - DEBUG: Added {brick.name} to visited list. Total visited: {visited.Count}", false);
         
         // Recursively check all connected neighbors
         foreach (var neighbor in brick.ConnectedNeighbors)
         {
-            if (!string.IsNullOrEmpty(context))
-            {
-                Debug.Log($"[{context}] FindAllConnectedInGroup() - Recursively checking neighbor of {brick.name}: {neighbor.name}");
-            }
+            brick.LogDebug($"FindAllConnectedInGroup() - DEBUG: Recursively checking neighbor of {brick.name}: {neighbor.name}", false);
             FindAllConnectedInGroup(neighbor, visited, context);
         }
         
-        if (!string.IsNullOrEmpty(context))
-        {
-            Debug.Log($"[{context}] FindAllConnectedInGroup() - Finished visiting all neighbors of {brick.name}");
-        }
+        brick.LogDebug($"FindAllConnectedInGroup() - DEBUG: Finished visiting all neighbors of {brick.name}", false);
     }
     
     /// <summary>
