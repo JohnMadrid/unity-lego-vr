@@ -5,7 +5,7 @@ using UnityEngine.XR.Interaction.Toolkit.Interactables;
 using System.Collections.Generic;
 using System.Collections;
 
-[RequireComponent(typeof(XRGrabInteractable), typeof(Rigidbody))]
+[RequireComponent(typeof(Rigidbody))]
 public class BrickBehavior : MonoBehaviour
 {
     // ========================================
@@ -30,6 +30,10 @@ public class BrickBehavior : MonoBehaviour
     // ========================================
     // SERIALIZED FIELDS
     // ========================================
+    [Header("Object Type")]
+    [Tooltip("Board detection is automatic based on GameObject tag. Set tag to 'Board' for boards, 'Brick' for bricks.")]
+    [SerializeField] private bool isBoard = false; // This will be set automatically based on tag
+
     [Header("Snapping Properties")]
     [Tooltip("How close two studs must be to be considered a valid connection (in meters). Lower values require more precision.")]
     public float snapTolerance = 0.01f;
@@ -140,6 +144,16 @@ public class BrickBehavior : MonoBehaviour
     public BrickConnectionManager ConnectionManager => connectionManager;
 
     // ========================================
+    // BOARD-SPECIFIC PROPERTIES
+    // ========================================
+    public bool IsBoard => isBoard;
+    public bool IsGrabbable => !isBoard && grabInteractable != null;
+    public bool IsGrabbed => IsGrabbable && grabInteractable.isSelected;
+    
+    // Public property to check the current tag (for debugging)
+    public string CurrentTag => gameObject.tag;
+
+    // ========================================
     // DEBUG LOGGING HELPERS
     // ========================================
     
@@ -220,6 +234,13 @@ public class BrickBehavior : MonoBehaviour
     // Public method for studs to check if the brick is in a snappable state.
     public bool IsReadyForSnap()
     {
+        // Boards are always ready for snapping (they can't be grabbed)
+        if (isBoard)
+        {
+            LogDebug($"IsReadyForSnap() - Board is always ready for snapping", true);
+            return true;
+        }
+
         // Check if we're in snap immunity period (after a split)
         if (Time.time < snapImmunityEndTime)
         {
@@ -267,17 +288,41 @@ public class BrickBehavior : MonoBehaviour
 
     void Awake()
     {
-        LogDebug("Awake() - Initializing BrickBehavior");
+        // Automatically detect if this is a board based on GameObject tag
+        isBoard = gameObject.CompareTag("Board");
+        LogDebug($"Awake() - Initializing BrickBehavior (isBoard: {isBoard}, tag: {gameObject.tag})");
 
         // Get required components
-        grabInteractable = GetComponent<XRGrabInteractable>();
         rb = GetComponent<Rigidbody>();
         originalParent = transform.parent;
 
+        // For boards, we don't need XRGrabInteractable
+        if (!isBoard)
+        {
+            grabInteractable = GetComponent<XRGrabInteractable>();
+            if (grabInteractable == null)
+            {
+                LogWarning("Awake() - WARNING: Non-board object missing XRGrabInteractable component!");
+            }
+        }
+        else
+        {
+            // Boards start with normal physics to fall onto table, then become kinematic after 2 seconds
+            if (rb != null)
+            {
+                rb.isKinematic = false;
+                rb.useGravity = true;
+                LogDebug("Awake() - Set board physics: isKinematic=false, useGravity=true (will fall, then become immovable)", true);
+                
+                // Start coroutine to make board kinematic after 2 seconds
+                StartCoroutine(MakeBoardKinematicAfterDelay());
+            }
+        }
+
         LogDebug($"Awake() - Components acquired: XRGrabInteractable={grabInteractable != null}, Rigidbody={rb != null}, OriginalParent={originalParent?.name ?? "null"}", true);
 
-        // Apply physics material for better friction if assigned
-        if (brickPhysicsMaterial != null)
+        // Apply physics material for better friction if assigned (only for bricks)
+        if (!isBoard && brickPhysicsMaterial != null)
         {
             var collider = GetComponent<Collider>();
             if (collider != null)
@@ -290,14 +335,23 @@ public class BrickBehavior : MonoBehaviour
         // Initialize managers
         InitializeManagers();
 
-        // Set up event listeners
-        grabInteractable.selectEntered.AddListener(OnGrabStarted);
-        grabInteractable.selectExited.AddListener(OnGrabReleased);
+        // Set up event listeners (only for bricks)
+        if (!isBoard && grabInteractable != null)
+        {
+            grabInteractable.selectEntered.AddListener(OnGrabStarted);
+            grabInteractable.selectExited.AddListener(OnGrabReleased);
+            LogDebug("Awake() - Event listeners attached", true);
+        }
+        else if (isBoard)
+        {
+            LogDebug("Awake() - Board detected, skipping event listeners", true);
+        }
 
-        LogDebug("Awake() - Event listeners attached", true);
-
-        // Validate initial physics state
-        physicsManager?.ValidatePhysicsState();
+        // Validate initial physics state (only for bricks)
+        if (!isBoard)
+        {
+            physicsManager?.ValidatePhysicsState();
+        }
         
         LogDebug("Awake() - Initialization complete");
     }
@@ -305,7 +359,7 @@ public class BrickBehavior : MonoBehaviour
     void Update()
     {
         // Periodically check for group joining opportunities when grabbed
-        if (grabInteractable.isSelected && currentState == BrickState.Grabbing)
+        if (grabInteractable != null && grabInteractable.isSelected && currentState == BrickState.Grabbing)
         {
             // Check every 10 frames (about 6 times per second at 60fps)
             if (Time.frameCount % 10 == 0)
@@ -427,7 +481,7 @@ public class BrickBehavior : MonoBehaviour
     {
         // Update the last grab position continuously while grabbing
         // This ensures we have the most recent position before XR Grab Interactable modifies it
-        if (currentState == BrickState.Grabbing && grabInteractable.isSelected)
+        if (grabInteractable != null && currentState == BrickState.Grabbing && grabInteractable.isSelected)
         {
             lastGrabPosition = transform.position;
             lastGrabRotation = transform.rotation;
@@ -438,8 +492,8 @@ public class BrickBehavior : MonoBehaviour
     {
         LogDebug("OnDestroy() - Cleaning up BrickBehavior");
         
-        // Remove event listeners
-        if (grabInteractable != null)
+        // Remove event listeners (only for bricks)
+        if (!isBoard && grabInteractable != null)
         {
             grabInteractable.selectEntered.RemoveListener(OnGrabStarted);
             grabInteractable.selectExited.RemoveListener(OnGrabReleased);
@@ -473,6 +527,13 @@ public class BrickBehavior : MonoBehaviour
 
     private void OnGrabStarted(SelectEnterEventArgs args)
     {
+        // Boards cannot be grabbed
+        if (isBoard)
+        {
+            LogWarning("OnGrabStarted() - WARNING: Attempted to grab a board, which is not allowed!");
+            return;
+        }
+
         LogDebug($"OnGrabStarted() - Brick grabbed, previous state: {currentState}");
         
         // Get the interactor that grabbed this brick
@@ -486,7 +547,7 @@ public class BrickBehavior : MonoBehaviour
         LogDebug($"OnGrabStarted() - DEBUG: Grabbed by interactor: {interactor.transform.name}", false);
 
         // Check if this brick is already being grabbed by a different interactor
-        if (grabInteractable.isSelected && grabInteractable.firstInteractorSelecting != interactor)
+        if (grabInteractable != null && grabInteractable.isSelected && grabInteractable.firstInteractorSelecting != interactor)
         {
             LogWarning($"OnGrabStarted() - WARNING: Brick already grabbed by different interactor: {grabInteractable.firstInteractorSelecting?.transform.name}");
             return;
@@ -508,10 +569,11 @@ public class BrickBehavior : MonoBehaviour
             
             foreach (var groupBrick in allGroupBricks)
             {
-                if (groupBrick != this && groupBrick.GetComponent<UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable>().isSelected)
+                var groupBrickGrabInteractable = groupBrick.GetComponent<UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable>();
+                if (groupBrick != this && groupBrickGrabInteractable != null && groupBrickGrabInteractable.isSelected)
                 {
                     hasOtherGrabbedBrick = true;
-                    otherInteractor = groupBrick.GetComponent<UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable>().firstInteractorSelecting;
+                    otherInteractor = groupBrickGrabInteractable.firstInteractorSelecting;
                     LogDebug($"OnGrabStarted() - DEBUG: Found other grabbed brick in group: {groupBrick.name} by interactor: {otherInteractor?.transform.name}", false);
                     break;
                 }
@@ -528,7 +590,10 @@ public class BrickBehavior : MonoBehaviour
                 LogWarning($"OnGrabStarted() - WARNING: Same interactor already grabbing another brick in group - preventing duplicate grab");
                 
                 // Force release the grab
-                grabInteractable.interactionManager.CancelInteractableSelection((UnityEngine.XR.Interaction.Toolkit.Interactables.IXRSelectInteractable)grabInteractable);
+                if (grabInteractable != null)
+                {
+                    grabInteractable.interactionManager.CancelInteractableSelection((UnityEngine.XR.Interaction.Toolkit.Interactables.IXRSelectInteractable)grabInteractable);
+                }
                 return;
             }
             // If no other brick is grabbed, allow single-hand grab of the group
@@ -565,6 +630,13 @@ public class BrickBehavior : MonoBehaviour
 
     private void OnGrabReleased(SelectExitEventArgs args)
     {
+        // Boards cannot be grabbed, so they can't be released
+        if (isBoard)
+        {
+            LogWarning("OnGrabReleased() - WARNING: Attempted to release a board, which is not allowed!");
+            return;
+        }
+
         LogDebug($"OnGrabReleased() - Brick released, current state: {currentState}");
         
         if (currentState == BrickState.Grabbing)
@@ -779,7 +851,7 @@ public class BrickBehavior : MonoBehaviour
         physicsManager?.OnGrabReleased();
         
         // IMPORTANT: Force restore physics if the brick is not actually grabbed but still has kinematic physics
-        if (rb != null && !grabInteractable.isSelected && rb.isKinematic)
+        if (rb != null && !(grabInteractable?.isSelected ?? false) && rb.isKinematic)
         {
             LogWarning("DelayedPhysicsManagerCall() - WARNING: Brick appears to be kinematic but not grabbed! Force restoring physics.");
             rb.isKinematic = false;
@@ -789,6 +861,22 @@ public class BrickBehavior : MonoBehaviour
         if (rb != null)
         {
             LogDebug($"DelayedPhysicsManagerCall() - DEBUG: Physics after calling manager - isKinematic: {rb.isKinematic}, useGravity: {rb.useGravity}, velocity: {rb.linearVelocity}", false);
+        }
+    }
+
+    // Coroutine to make board kinematic after a delay to allow initial falling
+    private System.Collections.IEnumerator MakeBoardKinematicAfterDelay()
+    {
+        LogDebug("MakeBoardKinematicAfterDelay() - Starting 2-second delay before making board kinematic");
+        
+        // Wait for 2 seconds
+        yield return new WaitForSeconds(2.0f);
+        
+        // Make the board kinematic to prevent further movement
+        if (rb != null && isBoard)
+        {
+            rb.isKinematic = true;
+            LogDebug("MakeBoardKinematicAfterDelay() - Made board kinematic (now immovable)");
         }
     }
 } 

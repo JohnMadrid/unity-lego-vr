@@ -18,15 +18,28 @@ public class BrickGroupOperations
 
     public void CheckForGroupJoiningOpportunities()
     {
-        // Find all other grabbed bricks
+        // Boards should not participate in group joining
+        if (brick.IsBoard)
+        {
+            brick.LogDebug($"CheckForGroupJoiningOpportunities() - Skipping group joining for board {brick.name}");
+            return;
+        }
+
+        // Find all other grabbed bricks (excluding boards)
         BrickBehavior[] allBricks = UnityEngine.Object.FindObjectsOfType<BrickBehavior>();
         float joinThreshold = brick.groupJoinThreshold; // Use BrickBehavior's groupJoinThreshold
         foreach (var otherBrick in allBricks)
         {
-            if (otherBrick != brick && otherBrick.GetComponent<UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable>().isSelected)
+            // Skip boards and non-grabbable objects
+            if (otherBrick.IsBoard || !otherBrick.IsGrabbable)
+            {
+                continue;
+            }
+
+            if (otherBrick != brick && otherBrick.IsGrabbed)
             {
                 // Check if grabbed by different controller
-                var thisInteractor = brick.GetComponent<UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable>().firstInteractorSelecting;
+                var thisInteractor = brick.IsGrabbable ? brick.GetComponent<UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable>().firstInteractorSelecting : null;
                 var otherInteractor = otherBrick.GetComponent<UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable>().firstInteractorSelecting;
                 
                 if (thisInteractor != otherInteractor)
@@ -56,6 +69,13 @@ public class BrickGroupOperations
 
     public void CheckForUnsnapConditions(IXRSelectInteractor interactor)
     {
+        // Boards should not participate in unsnap conditions
+        if (brick.IsBoard)
+        {
+            brick.LogDebug($"CheckForUnsnapConditions() - Skipping unsnap conditions for board {brick.name}");
+            return;
+        }
+
         brick.LogDebug($"CheckForUnsnapConditions() - Checking for unsnap conditions with {brick.ConnectedNeighbors.Count} neighbors");
         
         // Check if we are part of a larger group
@@ -63,16 +83,16 @@ public class BrickGroupOperations
         {
             // Find all bricks in the connected group
             List<BrickBehavior> allGroupBricks = new List<BrickBehavior>();
-            BrickGroupUtils.FindAllConnected(brick, allGroupBricks);
+            BrickGroupUtils.FindAllConnectedInGroup(brick, allGroupBricks, brick.name);
             brick.LogDebug($"CheckForUnsnapConditions() - Found {allGroupBricks.Count} total bricks in group");
             
-            // Find all grabbed bricks in the group
+            // Find all grabbed bricks in the group (excluding boards)
             List<BrickBehavior> grabbedBricks = new List<BrickBehavior>();
             List<IXRSelectInteractor> grabbedInteractors = new List<IXRSelectInteractor>();
             
             foreach (var groupBrick in allGroupBricks)
             {
-                if (groupBrick.GetComponent<UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable>().isSelected)
+                if (!groupBrick.IsBoard && groupBrick.IsGrabbed)
                 {
                     grabbedBricks.Add(groupBrick);
                     grabbedInteractors.Add(groupBrick.GetComponent<UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable>().firstInteractorSelecting);
@@ -131,18 +151,25 @@ public class BrickGroupOperations
     // Method to check if separate groups should be joined
     private void CheckForGroupJoining(IXRSelectInteractor interactor)
     {
+        // Boards should not participate in group joining
+        if (brick.IsBoard)
+        {
+            brick.LogDebug($"CheckForGroupJoining() - Skipping group joining for board {brick.name}");
+            return;
+        }
+
         brick.LogDebug($"CheckForGroupJoining() - Checking for group joining opportunities");
         
         // Find all bricks in the current group
         List<BrickBehavior> allGroupBricks = new List<BrickBehavior>();
-        BrickGroupUtils.FindAllConnected(brick, allGroupBricks);
+        BrickGroupUtils.FindAllConnectedInGroup(brick, allGroupBricks, brick.name);
         brick.LogDebug($"CheckForGroupJoining() - Found {allGroupBricks.Count} bricks in current group");
         
-        // Find all other grabbed bricks in the scene
+        // Find all other grabbed bricks in the scene (excluding boards)
         List<BrickBehavior> otherGrabbedBricks = new List<BrickBehavior>();
         foreach (var groupBrick in allGroupBricks)
         {
-            if (groupBrick != brick && groupBrick.GetComponent<UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable>().isSelected)
+            if (groupBrick != brick && !groupBrick.IsBoard && groupBrick.IsGrabbed)
             {
                 otherGrabbedBricks.Add(groupBrick);
             }
@@ -160,6 +187,13 @@ public class BrickGroupOperations
     // Helper method to check for group joining with a specific brick
     private void CheckForGroupJoiningWithBrick(BrickBehavior otherBrick, IXRSelectInteractor interactor)
     {
+        // Boards should not participate in group joining
+        if (brick.IsBoard || otherBrick.IsBoard)
+        {
+            brick.LogDebug($"CheckForGroupJoiningWithBrick() - Skipping group joining (one or both are boards)");
+            return;
+        }
+
         brick.LogDebug($"CheckForGroupJoiningWithBrick() - Checking for group joining with {otherBrick.name}");
         
         // Check if the other brick is in a different group
@@ -202,8 +236,8 @@ public class BrickGroupOperations
         List<BrickBehavior> group1 = new List<BrickBehavior>();
         List<BrickBehavior> group2 = new List<BrickBehavior>();
         
-        BrickGroupUtils.FindAllConnected(brick1, group1);
-        BrickGroupUtils.FindAllConnected(brick2, group2);
+        BrickGroupUtils.FindAllConnectedInGroup(brick1, group1, brick1.name);
+        BrickGroupUtils.FindAllConnectedInGroup(brick2, group2, brick2.name);
         
         // Check if there's any overlap between the groups
         foreach (var groupBrick in group1)
@@ -224,6 +258,13 @@ public class BrickGroupOperations
         // Check if these studs belong to different groups
         if (ourStud.ParentBrick != null && targetStud.ParentBrick != null)
         {
+            // Boards should not participate in group joining
+            if (ourStud.ParentBrick.IsBoard || targetStud.ParentBrick.IsBoard)
+            {
+                brick.LogDebug($"CheckForGroupJoiningDuringCollision() - Skipping group joining (one or both are boards)");
+                return;
+            }
+
             if (!BrickGroupUtils.AreBricksInSameGroup(ourStud.ParentBrick, targetStud.ParentBrick))
             {
                 brick.LogDebug($"CheckForGroupJoiningDuringCollision() - Studs belong to different groups, checking for joining");
@@ -314,11 +355,16 @@ public class BrickGroupOperations
                     brick.LogDebug($"SplitConnectedGroup() - Restored mass for {groupBrick.name}: mass=1.0f");
                     
                     // IMPORTANT: Restore physics for ALL bricks in the group, not just the master
-                    if (!groupBrick.GetComponent<UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable>().isSelected)
+                    // BUT only if the brick is not a board and not currently grabbed
+                    if (!groupBrick.IsBoard && !groupBrick.IsGrabbed)
                     {
                         groupBrick.GetComponent<Rigidbody>().isKinematic = false;
                         groupBrick.GetComponent<Rigidbody>().useGravity = true;
                         brick.LogDebug($"SplitConnectedGroup() - Restored physics for {groupBrick.name}: isKinematic=false, useGravity=true");
+                    }
+                    else if (groupBrick.IsBoard)
+                    {
+                        brick.LogDebug($"SplitConnectedGroup() - Skipping physics change for {groupBrick.name} (it's a board)");
                     }
                     else
                     {
@@ -327,12 +373,16 @@ public class BrickGroupOperations
                 }
             }
             
-            // Explicitly restore physics for the master brick ONLY if it's not currently grabbed
-            if (!master.GetComponent<UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable>().isSelected)
+            // Explicitly restore physics for the master brick ONLY if it's not currently grabbed AND is not a board
+            if (!master.IsBoard && !master.IsGrabbed)
             {
                 master.GetComponent<Rigidbody>().isKinematic = false;
                 master.GetComponent<Rigidbody>().useGravity = true;
                 brick.LogDebug($"SplitConnectedGroup() - Restored physics for master {master.name}: isKinematic=false, useGravity=true");
+            }
+            else if (master.IsBoard)
+            {
+                brick.LogDebug($"SplitConnectedGroup() - Skipping physics change for master {master.name} (it's a board)");
             }
             else
             {
@@ -387,7 +437,14 @@ public class BrickGroupOperations
                 
                 foreach (var groupBrick in groups[i])
                 {
-                    if (!groupBrick.GetComponent<UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable>().isSelected)
+                    // Skip boards - they should not be moved
+                    if (groupBrick.IsBoard)
+                    {
+                        brick.LogDebug($"MoveGroupsApart() - Skipping movement for board {groupBrick.name}");
+                        continue;
+                    }
+
+                    if (!groupBrick.IsGrabbed)
                     {
                         Vector3 newPosition = groupBrick.transform.position + (direction * separationDistance);
                         groupBrick.transform.position = newPosition;
@@ -447,6 +504,12 @@ public class BrickGroupOperations
                             brick.LogDebug($"FindBricksForGroup() - Excluding {neighbor.name} (directly grabbed by different interactor)");
                             shouldInclude = false;
                         }
+                    }
+                    // Boards should not be included in group splitting
+                    else if (neighbor.IsBoard)
+                    {
+                        brick.LogDebug($"FindBricksForGroup() - Excluding {neighbor.name} (it's a board)");
+                        shouldInclude = false;
                     }
                     else
                     {
