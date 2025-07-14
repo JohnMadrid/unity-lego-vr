@@ -80,11 +80,17 @@ public class Stud : MonoBehaviour
        Collider col = GetComponent<Collider>();
        if (col == null)
        {
-           Debug.LogWarning($"Stud '{name}' missing required Collider component!");
+           if (ParentBrick != null)
+               ParentBrick.LogWarning($"Stud '{name}' missing required Collider component!");
+           else
+               Debug.LogWarning($"Stud '{name}' missing required Collider component!");
        }
        else if (!col.isTrigger)
        {
-           Debug.LogWarning($"Stud '{name}' collider should be set to 'Is Trigger'");
+           if (ParentBrick != null)
+               ParentBrick.LogWarning($"Stud '{name}' collider should be set to 'Is Trigger'");
+           else
+               Debug.LogWarning($"Stud '{name}' collider should be set to 'Is Trigger'");
        }
    }
 
@@ -165,12 +171,14 @@ public class Stud : MonoBehaviour
        }
        
        // Now we know it's a stud, so we can show debug messages
-       ParentBrick.LogDebug($"OnTriggerEnter() - Collision detected with stud {other.name}");
+       if (ParentBrick != null)
+           ParentBrick.LogDebug($"OnTriggerEnter() - Collision detected with stud {other.name}");
        
        // IMPORTANT: Check if these studs belong to the same brick or connected group
        if (ParentBrick == otherStud.ParentBrick)
        {
-           ParentBrick.LogDebug($"OnTriggerEnter() - Same brick collision, ignoring");
+           if (ParentBrick != null)
+               ParentBrick.LogDebug($"OnTriggerEnter() - Same brick collision, ignoring");
            return;
        }
        
@@ -187,7 +195,8 @@ public class Stud : MonoBehaviour
        // Rate limiting
        if (Time.time - lastCollisionTime < (ParentBrick != null ? ParentBrick.collisionCooldown : 0.1f))
        {
-           ParentBrick.LogDebug($"OnTriggerEnter() - Rate limited, ignoring collision");
+           if (ParentBrick != null)
+               ParentBrick.LogDebug($"OnTriggerEnter() - Rate limited, ignoring collision");
            return;
        }
        lastCollisionTime = Time.time;
@@ -195,7 +204,7 @@ public class Stud : MonoBehaviour
        // Ignore if our parent brick is not in a state to snap (e.g., not being held and just released).
        if (ParentBrick == null)
        {
-           ParentBrick.LogWarning($"OnTriggerEnter() - WARNING: ParentBrick is null!");
+           Debug.LogWarning($"OnTriggerEnter() - WARNING: ParentBrick is null!");
            return;
        }
        
@@ -260,7 +269,8 @@ public class Stud : MonoBehaviour
        // If we were in snap range and the collision ended, reset to idle
        if (CurrentState == StudState.InSnapRange)
        {
-           ParentBrick.LogDebug($"OnTriggerExit() - Exiting snap range with {otherStud.name}");
+           if (ParentBrick != null)
+               ParentBrick.LogDebug($"OnTriggerExit() - Exiting snap range with {otherStud.name}");
            CurrentState = StudState.Idle;
            ResetVisual();
        }
