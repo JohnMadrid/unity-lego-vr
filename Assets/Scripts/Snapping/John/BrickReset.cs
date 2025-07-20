@@ -9,6 +9,7 @@ public class BrickReset : MonoBehaviour
 {
     private Vector3 _initialPosition;
     private Quaternion _initialRotation;
+    private BrickBehavior _brickBehavior;
 
     public float resetDelay = 0.2f;
     public float resetDuration = 1000f;
@@ -23,6 +24,7 @@ public class BrickReset : MonoBehaviour
     {
         _initialPosition = transform.position;
         _initialRotation = transform.rotation;
+        _brickBehavior = GetComponent<BrickBehavior>();
         
         // Check if this is a board or brick
         bool isBoard = gameObject.CompareTag("Board");
@@ -64,7 +66,7 @@ public class BrickReset : MonoBehaviour
             //{
             Debug.Log($"[BrickReset] {gameObject.name}: Starting reset routine - brick hit floor");
             //}
-            StartCoroutine(ResetRoutine());
+            InitiateGroupReset();
         }
         else if (_isResetting)
         {
@@ -109,78 +111,123 @@ public class BrickReset : MonoBehaviour
         }
     }
 
-    private IEnumerator ResetRoutine()
+    public void InitiateGroupReset()
     {
-        //if (enableDebugLogging)
-        //{
-        Debug.Log($"[BrickReset] {gameObject.name}: Reset routine started");
-        Debug.Log($"[BrickReset] {gameObject.name}: Current position: {transform.position}, Target: {_initialPosition}");
-        //}
+        if (_isResetting)
+        {
+            if (enableDebugLogging)
+            {
+                Debug.Log($"[BrickReset] {gameObject.name}: Group reset already in progress, ignoring request.");
+            }
+            return;
+        }
+
+        if (_brickBehavior == null)
+        {
+            if (enableDebugLogging)
+            {
+                Debug.LogWarning($"[BrickReset] {gameObject.name}: Cannot initiate group reset, BrickBehavior is null.");
+            }
+            // Fallback to individual reset if no BrickBehavior
+            StartCoroutine(ResetRoutine(new System.Collections.Generic.List<BrickReset> { this }));
+            return;
+        }
         
-        _isResetting = true;
+        var groupMembers = new System.Collections.Generic.List<BrickBehavior>();
+        BrickGroupUtils.FindAllConnectedInGroup(_brickBehavior, groupMembers, name);
+        
+        var resetTargets = new System.Collections.Generic.List<BrickReset>();
+        foreach (var member in groupMembers)
+        {
+            var resetter = member.GetComponent<BrickReset>();
+            if (resetter != null)
+            {
+                resetTargets.Add(resetter);
+            }
+        }
+
+        StartCoroutine(ResetRoutine(resetTargets));
+    }
+
+    private IEnumerator ResetRoutine(System.Collections.Generic.List<BrickReset> bricksToReset)
+    {
+        // Set resetting flag for all bricks in the group
+        foreach (var brick in bricksToReset)
+        {
+            brick._isResetting = true;
+        }
+
+        if (enableDebugLogging)
+        {
+            Debug.Log($"[BrickReset] {gameObject.name}: Reset routine started for group of {bricksToReset.Count} bricks.");
+        }
 
         yield return new WaitForSeconds(resetDelay);
         
         if (enableDebugLogging)
         {
-            Debug.Log($"[BrickReset] {gameObject.name}: Reset delay completed, starting movement");
+            Debug.Log($"[BrickReset] {gameObject.name}: Reset delay completed, starting movement for group.");
         }
 
-        Vector3 startPos = transform.position;
-        Quaternion startRot = transform.rotation;
-        float elapsed = 0f;
+        // --- NEW: Calculate target rotation for the group to be upright ---
+        var initiator = this;
+        // Find the rotation required to make the initiator's "up" vector point to the world's "up"
+        Quaternion deltaRotation = Quaternion.FromToRotation(initiator._initialRotation * Vector3.up, Vector3.up);
 
-        if (enableDebugLogging)
+        // --- NEW: Add the requested final rotation ---
+        Quaternion finalAdjustmentRotation = Quaternion.Euler(90, 0, 0);
+
+        // Store initial positions and target rotations for all bricks in the group
+        var startPositions = new System.Collections.Generic.Dictionary<BrickReset, Vector3>();
+        var startRotations = new System.Collections.Generic.Dictionary<BrickReset, Quaternion>();
+        var targetRotations = new System.Collections.Generic.Dictionary<BrickReset, Quaternion>();
+
+        foreach (var brick in bricksToReset)
         {
-            Debug.Log($"[BrickReset] {gameObject.name}: Moving from {startPos} to {_initialPosition}");
+            startPositions[brick] = brick.transform.position;
+            startRotations[brick] = brick.transform.rotation;
+            // Apply the upright delta and the final adjustment to each brick's initial rotation
+            targetRotations[brick] = finalAdjustmentRotation * deltaRotation * brick._initialRotation;
         }
 
+        float elapsed = 0f;
         while (elapsed < resetDuration)
         {
             elapsed += Time.deltaTime;
             float t = Mathf.SmoothStep(0f, 1f, elapsed / resetDuration);
-            transform.position = Vector3.Lerp(startPos, _initialPosition, t);
-            transform.rotation = Quaternion.Slerp(startRot, _initialRotation, t);
-            
-            // Log progress every 10 frames
-            if (enableDebugLogging && Mathf.FloorToInt(elapsed * 60) % 10 == 0)
+
+            foreach (var brick in bricksToReset)
             {
-                Debug.Log($"[BrickReset] {gameObject.name}: Reset progress - {t:P0} complete, position: {transform.position}");
+                brick.transform.position = Vector3.Lerp(startPositions[brick], brick._initialPosition, t);
+                brick.transform.rotation = Quaternion.Slerp(startRotations[brick], targetRotations[brick], t);
             }
             
             yield return null;
         }
 
-        // ensure exact position/rotation after interpolation
-        transform.position = _initialPosition;
-        transform.rotation = _initialRotation;
-
-        //if (enableDebugLogging)
-        //{
-        Debug.Log($"[BrickReset] {gameObject.name}: Reset complete - position: {transform.position}");
-        //}
-
-        // stop velocities to prevent drifting
-        Rigidbody rb = GetComponent<Rigidbody>();
-        if (rb != null)
+        // Ensure exact final positions and rotations
+        foreach (var brick in bricksToReset)
         {
-            rb.linearVelocity = Vector3.zero;
-            rb.angularVelocity = Vector3.zero;
-            if (enableDebugLogging)
+            brick.transform.position = brick._initialPosition;
+            brick.transform.rotation = targetRotations[brick];
+
+            Rigidbody rb = brick.GetComponent<Rigidbody>();
+            if (rb != null)
             {
-                Debug.Log($"[BrickReset] {gameObject.name}: Rigidbody velocities reset to zero");
+                rb.linearVelocity = Vector3.zero;
+                rb.angularVelocity = Vector3.zero;
             }
         }
-        else if (enableDebugLogging)
+        
+        // Reset the flag for all bricks
+        foreach (var brick in bricksToReset)
         {
-            Debug.LogWarning($"[BrickReset] {gameObject.name}: No Rigidbody found on brick");
+            brick._isResetting = false;
         }
 
-        _isResetting = false;
-        
-        //if (enableDebugLogging)
-        //{
-        Debug.Log($"[BrickReset] {gameObject.name}: Reset routine finished");
-        //}
+        if (enableDebugLogging)
+        {
+            Debug.Log($"[BrickReset] {gameObject.name}: Group reset routine finished.");
+        }
     }
 }
