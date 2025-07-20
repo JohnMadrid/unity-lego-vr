@@ -136,6 +136,10 @@ public class BrickBehavior : MonoBehaviour
     private bool originalTrackPosition;
     private bool originalTrackRotation;
 
+    // --- MULTI-SNAP STATE ---
+    private Queue<(Stud, Stud, Vector3, Quaternion)> pendingMultiSnaps = new Queue<(Stud, Stud, Vector3, Quaternion)>();
+    private bool isMultiSnapInProgress = false;
+
     // ========================================
     // MANAGER REFERENCES
     // ========================================
@@ -170,7 +174,7 @@ public class BrickBehavior : MonoBehaviour
     // DEBUG LOGGING HELPERS
     // ========================================
     
-    public void LogDebug(string message, bool isExtensiveDebug = false)
+    public void LogDebug(string message, bool isNormalOrExtensiveDebug = false)
     {
         if (debugLevel == DebugLevel.NoDebug) return;
         
@@ -183,13 +187,13 @@ public class BrickBehavior : MonoBehaviour
         switch (debugLevel)
         {
             case DebugLevel.LiteDebug:
-                // Only log non-DEBUG messages that aren't extensive
-                shouldLog = !containsDebug && !isExtensiveDebug;
+                // Only log non-DEBUG messages that aren't normal or extensive
+                shouldLog = !containsDebug && !isNormalOrExtensiveDebug;
                 break;
                 
             case DebugLevel.NormalDebug:
-                // Log non-DEBUG messages, but DEBUG messages only if extensive debug is enabled
-                shouldLog = !containsDebug || (containsDebug && isExtensiveDebug);
+                // Log non-DEBUG messages, and normal/extensive messages if flagged
+                shouldLog = !containsDebug || (containsDebug && isNormalOrExtensiveDebug);
                 break;
                 
             case DebugLevel.ExtensiveDebug:
@@ -205,7 +209,7 @@ public class BrickBehavior : MonoBehaviour
         }
     }
     
-    public void LogWarning(string message, bool isExtensiveDebug = false)
+    public void LogWarning(string message, bool isNormalOrExtensiveDebug = false)
     {
         if (debugLevel == DebugLevel.NoDebug) return;
         
@@ -218,13 +222,13 @@ public class BrickBehavior : MonoBehaviour
         switch (debugLevel)
         {
             case DebugLevel.LiteDebug:
-                // Only log non-DEBUG messages that aren't extensive
-                shouldLog = !containsDebug && !isExtensiveDebug;
+                // Only log non-DEBUG messages that aren't normal or extensive
+                shouldLog = !containsDebug && !isNormalOrExtensiveDebug;
                 break;
                 
             case DebugLevel.NormalDebug:
-                // Log non-DEBUG messages, but DEBUG messages only if extensive debug is enabled
-                shouldLog = !containsDebug || (containsDebug && isExtensiveDebug);
+                // Log non-DEBUG messages, and normal/extensive messages if flagged
+                shouldLog = !containsDebug || (containsDebug && isNormalOrExtensiveDebug);
                 break;
                 
             case DebugLevel.ExtensiveDebug:
@@ -692,42 +696,158 @@ public class BrickBehavior : MonoBehaviour
             Invoke(nameof(ResetReleaseFlag), releaseFlagDelay);
             LogDebug($"OnGrabReleased() - Scheduled ResetReleaseFlag in {releaseFlagDelay} seconds");
 
-            // Restore the last known grab position to ensure accurate snapping
             Vector3 releasePosition = lastGrabPosition;
             Quaternion releaseRotation = lastGrabRotation;
             LogDebug($"OnGrabReleased() - Using last grab position: {releasePosition}, rotation: {releaseRotation.eulerAngles}");
 
-            // MODIFIED: Group-aware snap execution based on stud state
-            bool snapExecuted = false;
+            // --- MULTI-SNAP LOGIC ---
             List<BrickBehavior> groupBricks = new List<BrickBehavior>();
             BrickGroupUtils.FindAllConnectedInGroup(this, groupBricks, name);
+            var snapPairs = new List<(Stud, Stud, BrickBehavior, BrickBehavior)>();
+            var seenPairs = new HashSet<(Stud, Stud)>();
 
             foreach (var brickInGroup in groupBricks)
             {
                 foreach (var stud in brickInGroup.studManager.AllStuds)
                 {
-                    if (stud.PotentialSnapTarget != null)
+                    var target = stud.PotentialSnapTarget;
+                    if (target != null && stud.ParentBrick != null && target.ParentBrick != null)
                     {
-                        LogDebug($"OnGrabReleased() - Found potential snap on stud {stud.name} in group, executing.");
-                        snappingSystem.RequestSnap(stud, stud.PotentialSnapTarget, releasePosition, releaseRotation);
-                        snapExecuted = true;
-                        break; // Execute only the first found snap
+                        // Only consider snaps between different bricks and different groups
+                        if (stud.ParentBrick != target.ParentBrick && !BrickBehavior.AreBricksInSameGroup(stud.ParentBrick, target.ParentBrick))
+                        {
+                            // Avoid duplicate pairs (A,B) and (B,A)
+                            var pair = (stud, target);
+                            var reversePair = (target, stud);
+                            if (!seenPairs.Contains(pair) && !seenPairs.Contains(reversePair))
+                            {
+                                snapPairs.Add((stud, target, stud.ParentBrick, target.ParentBrick));
+                                seenPairs.Add(pair);
+                            }
+                        }
                     }
                 }
-                if (snapExecuted) break;
             }
 
-            if (!snapExecuted)
+            if (snapPairs.Count == 0)
             {
                 LogDebug($"OnGrabReleased() - No potential snap found in group.");
-                // Handle release logic through managers
                 connectionManager?.OnGrabReleased();
                 StartCoroutine(DelayedPhysicsManagerCall());
+                return;
             }
+
+            // Sort so the first snap is the one involving this brick if possible
+            int firstIdx = snapPairs.FindIndex(p => p.Item3 == this || p.Item4 == this);
+            if (firstIdx > 0)
+            {
+                var first = snapPairs[firstIdx];
+                snapPairs.RemoveAt(firstIdx);
+                snapPairs.Insert(0, first);
+            }
+
+            // Prepare the queue for sequential execution
+            pendingMultiSnaps.Clear();
+            foreach (var (stud, target, _, _) in snapPairs)
+            {
+                pendingMultiSnaps.Enqueue((stud, target, releasePosition, releaseRotation));
+            }
+            isMultiSnapInProgress = true;
+            LogDebug($"OnGrabReleased() - Multi-snap: {pendingMultiSnaps.Count} snap(s) queued");
+            ExecuteNextMultiSnap();
         }
         else
         {
             LogDebug($"OnGrabReleased() - Ignored release (not in Grabbing state)");
+        }
+    }
+
+    private void ExecuteNextMultiSnap()
+    {
+        // Dynamically rebuild the snap queue after each snap
+        // 1. Find all bricks in the current group
+        List<BrickBehavior> currentGroup = new List<BrickBehavior>();
+        BrickGroupUtils.FindAllConnectedInGroup(this, currentGroup, name);
+        var newSnapPairs = new List<(Stud, Stud, BrickBehavior, BrickBehavior)>();
+        var seenPairs = new HashSet<(Stud, Stud)>();
+
+        foreach (var brickInGroup in currentGroup)
+        {
+            foreach (var stud in brickInGroup.studManager.AllStuds)
+            {
+                var target = stud.PotentialSnapTarget;
+                if (target != null && stud.ParentBrick != null && target.ParentBrick != null)
+                {
+                    // Only consider snaps between different bricks and different groups
+                    if (stud.ParentBrick != target.ParentBrick && !BrickBehavior.AreBricksInSameGroup(stud.ParentBrick, target.ParentBrick))
+                    {
+                        var pair = (stud, target);
+                        var reversePair = (target, stud);
+                        if (!seenPairs.Contains(pair) && !seenPairs.Contains(reversePair))
+                        {
+                            newSnapPairs.Add((stud, target, stud.ParentBrick, target.ParentBrick));
+                            seenPairs.Add(pair);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Remove any pairs where either stud is already connected to the other's brick
+        newSnapPairs.RemoveAll(pair =>
+            pair.Item3.ConnectedNeighbors.Contains(pair.Item4) ||
+            pair.Item4.ConnectedNeighbors.Contains(pair.Item3)
+        );
+
+        if (newSnapPairs.Count == 0)
+        {
+            isMultiSnapInProgress = false;
+            LogDebug($"ExecuteNextMultiSnap() - All multi-snaps complete");
+            StartCoroutine(DelayedPhysicsManagerCall());
+            return;
+        }
+
+        // Pick the first available snap
+        (Stud snapStud, Stud snapTarget, BrickBehavior fromBrick, BrickBehavior toBrick) = newSnapPairs[0];
+        LogDebug($"ExecuteNextMultiSnap() - Executing snap: {snapStud.name} <-> {snapTarget.name} (from {fromBrick.name} to {toBrick.name})");
+        // Clear snap targets to avoid duplicate snaps
+        snapStud.PotentialSnapTarget = null;
+        snapTarget.PotentialSnapTarget = null;
+        // Remove this pair from the queue (not needed, as we rebuild each time)
+        snappingSystem.RequestSnap(snapStud, snapTarget, lastGrabPosition, lastGrabRotation);
+    }
+
+    // In FinalizeSnap, after each snap, continue the multi-snap sequence if needed
+    public void OnSnapFinalized_MultiSnap()
+    {
+        if (isMultiSnapInProgress)
+        {
+            // --- FIX: Force group/neighbor update before next multi-snap ---
+            ForceGroupAndNeighborUpdate();
+
+            LogDebug($"OnSnapFinalized_MultiSnap() - Continuing multi-snap sequence");
+            ExecuteNextMultiSnap();
+        }
+    }
+
+    // --- FIX: Utility to force group/neighbor update after each snap ---
+    private void ForceGroupAndNeighborUpdate()
+    {
+        // Find all bricks in the current group
+        List<BrickBehavior> groupBricks = new List<BrickBehavior>();
+        BrickGroupUtils.FindAllConnectedInGroup(this, groupBricks, name);
+        foreach (var brick in groupBricks)
+        {
+            // Force update master and neighbors
+            brick.UpdateMaster(this.MasterBrick);
+            // Clear potential snap targets for all studs
+            if (brick.studManager != null)
+            {
+                foreach (var stud in brick.studManager.AllStuds)
+                {
+                    stud.PotentialSnapTarget = null;
+                }
+            }
         }
     }
 
