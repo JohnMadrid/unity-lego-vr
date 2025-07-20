@@ -95,6 +95,15 @@ public class BrickBehavior : MonoBehaviour
     public DebugLevel debugLevel = DebugLevel.NormalDebug;
 
     // ========================================
+    // PUBLIC FIELDS - COMPONENTS
+    // ========================================
+    public BrickSnappingSystem snappingSystem;
+    public BrickConnectionManager connectionManager;
+    public BrickPhysicsManager physicsManager;
+    public BrickGroupOperations groupOperations;
+    public BrickStudManager studManager;
+
+    // ========================================
     // PRIVATE FIELDS - COMPONENTS
     // ========================================
     private XRGrabInteractable grabInteractable;
@@ -126,11 +135,11 @@ public class BrickBehavior : MonoBehaviour
     // ========================================
     // MANAGER REFERENCES
     // ========================================
-    private BrickStudManager studManager;
-    private BrickSnappingSystem snappingSystem;
-    private BrickConnectionManager connectionManager;
-    private BrickPhysicsManager physicsManager;
-    private BrickGroupOperations groupOperations;
+    // private BrickStudManager studManager; // This line is removed as it's now public
+    // private BrickSnappingSystem snappingSystem; // This line is removed as it's now public
+    // private BrickConnectionManager connectionManager; // This line is removed as it's now public
+    // private BrickPhysicsManager physicsManager; // This line is removed as it's now public
+    // private BrickGroupOperations groupOperations; // This line is removed as it's now public
 
     // ========================================
     // PUBLIC PROPERTIES
@@ -525,6 +534,10 @@ public class BrickBehavior : MonoBehaviour
         LogDebug("InitializeManagers() - All managers initialized", true);
     }
 
+    // ========================================
+    // XR INTERACTION EVENT HANDLERS
+    // ========================================
+
     private void OnGrabStarted(SelectEnterEventArgs args)
     {
         // Boards cannot be grabbed
@@ -557,49 +570,28 @@ public class BrickBehavior : MonoBehaviour
         if (ConnectedNeighbors.Count > 0)
         {
             LogDebug($"OnGrabStarted() - Brick is part of connected group with {ConnectedNeighbors.Count} neighbors");
-            
             // Find all bricks in the connected group
             List<BrickBehavior> allGroupBricks = new List<BrickBehavior>();
             BrickGroupUtils.FindAllConnectedInGroup(this, allGroupBricks, name);
-            LogDebug($"OnGrabStarted() - DEBUG: Found {allGroupBricks.Count} total bricks in group", false);
-            
-            // Check if any other brick in the group is already being grabbed by a different interactor
-            bool hasOtherGrabbedBrick = false;
-            UnityEngine.XR.Interaction.Toolkit.Interactors.IXRSelectInteractor otherInteractor = null;
-            
-            foreach (var groupBrick in allGroupBricks)
+            // Find any other grabbed bricks in the group
+            BrickBehavior otherGrabbedBrick = allGroupBricks.Find(b => b.IsGrabbed && b != this);
+            if (otherGrabbedBrick != null)
             {
-                var groupBrickGrabInteractable = groupBrick.GetComponent<UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable>();
-                if (groupBrick != this && groupBrickGrabInteractable != null && groupBrickGrabInteractable.isSelected)
-                {
-                    hasOtherGrabbedBrick = true;
-                    otherInteractor = groupBrickGrabInteractable.firstInteractorSelecting;
-                    LogDebug($"OnGrabStarted() - DEBUG: Found other grabbed brick in group: {groupBrick.name} by interactor: {otherInteractor?.transform.name}", false);
-                    break;
-                }
-            }
-            
-            // If another brick in the group is grabbed by a different interactor, allow this grab (multi-controller scenario)
-            if (hasOtherGrabbedBrick && otherInteractor != interactor)
-            {
-                LogDebug("OnGrabStarted() - Multi-controller scenario detected - allowing grab for group manipulation");
-            }
-            // If another brick is grabbed by the same interactor, prevent duplicate grabs
-            else if (hasOtherGrabbedBrick && otherInteractor == interactor)
-            {
-                LogWarning($"OnGrabStarted() - WARNING: Same interactor already grabbing another brick in group - preventing duplicate grab");
+                LogDebug($"OnGrabStarted() - Multi-controller scenario detected - splitting group immediately");
+                List<BrickBehavior> grabbedBricks = new List<BrickBehavior> { this, otherGrabbedBrick };
                 
-                // Force release the grab
-                if (grabInteractable != null)
-                {
-                    grabInteractable.interactionManager.CancelInteractableSelection((UnityEngine.XR.Interaction.Toolkit.Interactables.IXRSelectInteractable)grabInteractable);
-                }
-                return;
+                // CRITICAL FIX: Ensure the original grabbed brick is processed first.
+                // The 'otherGrabbedBrick' was the original master, so it should be first in the list.
+                grabbedBricks.Reverse();
+                
+                groupOperations.SplitConnectedGroup(grabbedBricks);
+                // After splitting, the current brick's group has changed. We need to re-evaluate the grab.
+                // The rest of the grab logic will be handled by the normal flow after this.
             }
-            // If no other brick is grabbed, allow single-hand grab of the group
             else
             {
-                LogDebug("OnGrabStarted() - DEBUG: Single-hand grab of connected group allowed - no other bricks currently grabbed", false);
+                // NEW: Check for grabbing a separate group
+                groupOperations.MoveGrabbedGroupsApart();
             }
         }
         else
@@ -624,13 +616,38 @@ public class BrickBehavior : MonoBehaviour
         
         LogDebug($"OnGrabStarted() - State updated to: {currentState}");
 
-        // Check for unsnap conditions
-        groupOperations?.CheckForUnsnapConditions(interactor);
+        // === DEBUG: Print connection graph and controller splits ===
+        // Find all bricks in the current group
+        List<BrickBehavior> debugAllGroupBricks = new List<BrickBehavior>();
+        BrickGroupUtils.FindAllConnectedInGroup(this, debugAllGroupBricks, name);
+        LogDebug($"OnGrabStarted() - Group connection graph after grab:");
+        foreach (var brick in debugAllGroupBricks)
+        {
+            string neighbors = string.Join(", ", brick.ConnectedNeighbors.ConvertAll(b => b.name));
+            LogDebug($"OnGrabStarted() -   - {brick.name} (Master: {(brick.MasterBrick == brick ? "YES" : "NO")}) | Neighbors: [{neighbors}]");
+        }
+        LogDebug($"OnGrabStarted() - Master brick for this group: {MasterBrick.name}");
+        // Check for multi-controller scenario
+        var debugGrabbedInteractors = new Dictionary<UnityEngine.XR.Interaction.Toolkit.Interactors.IXRSelectInteractor, List<BrickBehavior>>();
+        var debugAllGrabbedBricks = new List<BrickBehavior>();
+        // Find all grabbed bricks in the current group and their interactors
+        foreach (var b in debugAllGroupBricks)
+        {
+            var interactable = b.GetComponent<UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable>();
+            if (interactable != null && interactable.isSelected)
+            {
+                debugAllGrabbedBricks.Add(b);
+                var subInteractor = interactable.firstInteractorSelecting;
+                if (!debugGrabbedInteractors.ContainsKey(subInteractor))
+                {
+                    debugGrabbedInteractors[subInteractor] = new List<BrickBehavior>();
+                }
+            }
+        }
     }
 
     private void OnGrabReleased(SelectExitEventArgs args)
     {
-        // Boards cannot be grabbed, so they can't be released
         if (isBoard)
         {
             LogWarning("OnGrabReleased() - WARNING: Attempted to release a board, which is not allowed!");
@@ -638,34 +655,52 @@ public class BrickBehavior : MonoBehaviour
         }
 
         LogDebug($"OnGrabReleased() - Brick released, current state: {currentState}");
-        
+
         if (currentState == BrickState.Grabbing)
         {
-            // IMPORTANT: Use the last known grab position instead of current position
-            // This avoids issues with XR Grab Interactable modifying the position during release
-            Vector3 releasePosition = lastGrabPosition;
-            Quaternion releaseRotation = lastGrabRotation;
-            LogDebug($"OnGrabReleased() - DEBUG: Using last grab position: {releasePosition}, rotation: {releaseRotation.eulerAngles}", false);
-            
             justReleased = true;
             LogDebug("OnGrabReleased() - Set justReleased flag to true");
-        
-            // Reset the flag after a short delay to prevent accidental snaps later
-            Invoke(nameof(ResetReleaseFlag), releaseFlagDelay);
-            LogDebug($"OnGrabReleased() - DEBUG: Scheduled ResetReleaseFlag in {releaseFlagDelay} seconds", false);
-
-            // Execute any stored potential snap with the captured release position
-            ExecuteStoredSnap(releasePosition, releaseRotation);
-
-            // Handle release logic through managers (but delay physics until snap is complete)
-            connectionManager?.OnGrabReleased();
             
-            // Delay physics manager call to avoid conflicts during snap animation
+            Invoke(nameof(ResetReleaseFlag), releaseFlagDelay);
+            LogDebug($"OnGrabReleased() - Scheduled ResetReleaseFlag in {releaseFlagDelay} seconds");
+
+            // Restore the last known grab position to ensure accurate snapping
+            Vector3 releasePosition = lastGrabPosition;
+            Quaternion releaseRotation = lastGrabRotation;
+            LogDebug($"OnGrabReleased() - Using last grab position: {releasePosition}, rotation: {releaseRotation.eulerAngles}");
+
+            // MODIFIED: Group-aware snap execution based on stud state
+            bool snapExecuted = false;
+            List<BrickBehavior> groupBricks = new List<BrickBehavior>();
+            BrickGroupUtils.FindAllConnectedInGroup(this, groupBricks, name);
+
+            foreach (var brickInGroup in groupBricks)
+            {
+                foreach (var stud in brickInGroup.studManager.AllStuds)
+                {
+                    if (stud.PotentialSnapTarget != null)
+                    {
+                        LogDebug($"OnGrabReleased() - Found potential snap on stud {stud.name} in group, executing.");
+                        snappingSystem.RequestSnap(stud, stud.PotentialSnapTarget, releasePosition, releaseRotation);
+                        snapExecuted = true;
+                        break; // Execute only the first found snap
+                    }
+                }
+                if (snapExecuted) break;
+            }
+
+            if (!snapExecuted)
+            {
+                LogDebug($"OnGrabReleased() - No potential snap found in group.");
+            }
+
+            // Handle release logic through managers
+            connectionManager?.OnGrabReleased();
             StartCoroutine(DelayedPhysicsManagerCall());
         }
         else
         {
-            LogDebug("OnGrabReleased() - DEBUG: Ignored release (not in Grabbing state)", false);
+            LogDebug($"OnGrabReleased() - Ignored release (not in Grabbing state)");
         }
     }
 
@@ -688,24 +723,10 @@ public class BrickBehavior : MonoBehaviour
     }
 
     // Method to store a potential snap connection (called during collision detection)
-    public void StorePotentialSnap(Stud ourStud, Stud targetStud)
+    public void StorePotentialSnap(Stud fromStud, Stud toStud)
     {
-        LogDebug($"StorePotentialSnap() - Storing potential snap from {ourStud.name} to {targetStud.name}");
-        
-        // Check if this is a potential group joining scenario
-        groupOperations?.CheckForGroupJoiningDuringCollision(ourStud, targetStud);
-        
-        // Only store if we don't already have a potential snap
-        if (potentialSnapStud == null)
-        {
-            potentialSnapStud = ourStud;
-            potentialSnapTargetStud = targetStud;
-            LogDebug("StorePotentialSnap() - DEBUG: Potential snap stored", false);
-        }
-        else
-        {
-            LogDebug("StorePotentialSnap() - DEBUG: Already have a potential snap, ignoring new one", false);
-        }
+        // This method is now obsolete. The potential snap is stored on the studs.
+        // snappingSystem.StorePotentialSnap(fromStud, toStud);
     }
 
     // Method to execute the stored potential snap (called after release)
@@ -877,6 +898,29 @@ public class BrickBehavior : MonoBehaviour
         {
             rb.isKinematic = true;
             LogDebug("MakeBoardKinematicAfterDelay() - Made board kinematic (now immovable)");
+        }
+    }
+
+    // Helper for debug subgraph traversal
+    private void FindBricksForDebugSubGroup(BrickBehavior start, List<BrickBehavior> debugGrabbedBricks, List<BrickBehavior> result)
+    {
+        Queue<BrickBehavior> toVisit = new Queue<BrickBehavior>();
+        HashSet<BrickBehavior> visited = new HashSet<BrickBehavior>();
+        toVisit.Enqueue(start);
+        visited.Add(start);
+        result.Add(start);
+        while (toVisit.Count > 0)
+        {
+            var current = toVisit.Dequeue();
+            foreach (var neighbor in current.ConnectedNeighbors)
+            {
+                if (neighbor == null || visited.Contains(neighbor)) continue;
+                // Don't cross to other grabbed bricks
+                if (debugGrabbedBricks.Contains(neighbor) && neighbor != start) continue;
+                visited.Add(neighbor);
+                result.Add(neighbor);
+                toVisit.Enqueue(neighbor);
+            }
         }
     }
 } 

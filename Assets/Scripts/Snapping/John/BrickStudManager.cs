@@ -11,6 +11,16 @@ public class BrickStudManager
     public List<Stud> TopStuds => topStuds;
     public List<Stud> BottomStuds => bottomStuds;
 
+    public List<Stud> AllStuds
+    {
+        get
+        {
+            var allStuds = new List<Stud>(topStuds);
+            allStuds.AddRange(bottomStuds);
+            return allStuds;
+        }
+    }
+
     public BrickStudManager(BrickBehavior brick)
     {
         this.brick = brick;
