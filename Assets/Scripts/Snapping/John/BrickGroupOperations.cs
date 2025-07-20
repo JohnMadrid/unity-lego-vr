@@ -329,6 +329,19 @@ public class BrickGroupOperations
                 BreakConnectionsBetweenGroups(newGroups[i], newGroups[j]);
             }
         }
+
+        // --- NEW FIX ---
+        // Before assigning new masters, reset the original master of the bricks that will BECOME masters.
+        // This prevents them from carrying over the old group's original master.
+        foreach (var master in grabbedBricks)
+        {
+            if (master.connectionManager != null)
+            {
+                master.connectionManager.m_OriginalMaster = master;
+                brick.LogDebug($"SplitConnectedGroup() - Resetting original master for new master: {master.name}");
+            }
+        }
+
         for (int i = 0; i < newGroups.Count; i++)
         {
             var master = grabbedBricks[i];
@@ -506,12 +519,16 @@ public class BrickGroupOperations
                     // Check if joint is on brickA
                     foreach (var joint in brickA.GetComponents<FixedJoint>())
                     {
-                        if (joint.connectedBody == neighborOfA.GetComponent<Rigidbody>())
+                        if (joint.connectedBody != null)
                         {
-                            brick.LogDebug($"  Destroying joint on {brickA.name} connected to {neighborOfA.name}");
-                            UnityEngine.Object.Destroy(joint);
-                            jointDestroyed = true;
-                            break;
+                            var connectedBehavior = joint.connectedBody.GetComponent<BrickBehavior>();
+                            if (connectedBehavior != null && groupB.Contains(connectedBehavior))
+                            {
+                                brick.LogDebug($"  Destroying joint on {brickA.name} connected to {connectedBehavior.name} in other group");
+                                UnityEngine.Object.Destroy(joint);
+                                jointDestroyed = true;
+                                break;
+                            }
                         }
                     }
 
@@ -520,11 +537,15 @@ public class BrickGroupOperations
                     {
                         foreach (var joint in neighborOfA.GetComponents<FixedJoint>())
                         {
-                            if (joint.connectedBody == brickA.GetComponent<Rigidbody>())
+                            if (joint.connectedBody != null)
                             {
-                                brick.LogDebug($"  Destroying joint on {neighborOfA.name} connected to {brickA.name}");
-                                UnityEngine.Object.Destroy(joint);
-                                break;
+                                var connectedBehavior = joint.connectedBody.GetComponent<BrickBehavior>();
+                                if (connectedBehavior != null && groupA.Contains(connectedBehavior))
+                                {
+                                    brick.LogDebug($"  Destroying joint on {neighborOfA.name} connected to {connectedBehavior.name} in other group");
+                                    UnityEngine.Object.Destroy(joint);
+                                    break;
+                                }
                             }
                         }
                     }

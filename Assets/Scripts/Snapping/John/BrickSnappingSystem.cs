@@ -6,6 +6,7 @@ public class BrickSnappingSystem
 {
     private readonly BrickBehavior brick;
     private readonly BrickStudManager studManager;
+    private BrickBehavior frozenBrick = null;
     
     // Missing variables that were in the original BrickBehavior
     private Vector3 targetSnapPosition;
@@ -211,6 +212,28 @@ public class BrickSnappingSystem
         else if (targetBrick.IsBoard)
         {
             brick.LogDebug($"RequestSnap() - Skipping physics change for target board during snap", true);
+        }
+
+        // --- NEW: Freeze the grabbed brick if this is a two-controller snap ---
+        // Find if any brick in the target group is grabbed, and freeze that specific one.
+        BrickBehavior grabbedBrickInTargetGroup = null;
+        List<BrickBehavior> targetGroupBricks = new List<BrickBehavior>();
+        BrickGroupUtils.FindAllConnectedInGroup(targetBrick, targetGroupBricks, brick.name);
+
+        foreach (var brickInGroup in targetGroupBricks)
+        {
+            if (brickInGroup.IsGrabbed)
+            {
+                grabbedBrickInTargetGroup = brickInGroup;
+                break;
+            }
+        }
+
+        if (grabbedBrickInTargetGroup != null)
+        {
+            brick.LogDebug($"RequestSnap() - Freezing grabbed brick in target group: {grabbedBrickInTargetGroup.name}");
+            grabbedBrickInTargetGroup.Freeze(true);
+            frozenBrick = grabbedBrickInTargetGroup;
         }
 
         // Set snapping state
@@ -547,27 +570,28 @@ public class BrickSnappingSystem
             // Get all bricks in the target's group
             List<BrickBehavior> groupBricks = new List<BrickBehavior>();
             BrickGroupUtils.FindAllConnectedInGroup(targetBrick, groupBricks, targetBrick.name);
+            
             // Check if any brick in the group is grabbed
-            bool groupIsGrabbed = false;
-            BrickBehavior grabbedMaster = null;
+            BrickBehavior grabbedBrick = null;
             foreach (var groupBrick in groupBricks)
             {
                 if (groupBrick.IsGrabbed)
                 {
-                    groupIsGrabbed = true;
-                    grabbedMaster = groupBrick.MasterBrick;
+                    grabbedBrick = groupBrick;
                     break;
                 }
             }
-            if (groupIsGrabbed && grabbedMaster != null)
+
+            if (grabbedBrick != null && grabbedBrick.OriginalMaster != null)
             {
-                // Connect to the master brick's Rigidbody (the one being held)
-                jointTargetRigidbody = grabbedMaster.GetComponent<Rigidbody>();
-                brick.LogDebug($"FinalizeSnap() - Two-controller scenario: Connecting joint to held group's master brick: {grabbedMaster.name}");
+                // Connect to the ORIGINAL master's Rigidbody for maximum stability.
+                var originalMaster = grabbedBrick.OriginalMaster;
+                jointTargetRigidbody = originalMaster.GetComponent<Rigidbody>();
+                brick.LogDebug($"FinalizeSnap() - Two-controller scenario: Connecting joint to held group's ORIGINAL master brick: {originalMaster.name}");
             }
             else
             {
-                // Default: connect to the target brick's Rigidbody
+                // Default: connect to the target brick's Rigidbody (which is its own master at this point)
                 jointTargetRigidbody = targetBrick.GetComponent<Rigidbody>();
                 brick.LogDebug($"FinalizeSnap() - Normal scenario: Connecting joint to target brick: {targetBrick.name}");
             }
@@ -670,6 +694,14 @@ public class BrickSnappingSystem
         // Update the logical connection graph
         brick.ConnectedNeighbors.Add(targetBrick);
         targetBrick.ConnectedNeighbors.Add(brick);
+        }
+
+        // --- NEW: Un-freeze the brick after snap is complete ---
+        if (frozenBrick != null)
+        {
+            brick.LogDebug($"FinalizeSnap() - Un-freezing brick: {frozenBrick.name}");
+            frozenBrick.Freeze(false);
+            frozenBrick = null;
         }
 
         // Clear the reference
