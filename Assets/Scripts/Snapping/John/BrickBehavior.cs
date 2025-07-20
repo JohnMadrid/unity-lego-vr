@@ -132,6 +132,10 @@ public class BrickBehavior : MonoBehaviour
     private Vector3 lastGrabPosition;
     private Quaternion lastGrabRotation;
 
+    // --- NEW: State for freezing grabbed bricks ---
+    private bool originalTrackPosition;
+    private bool originalTrackRotation;
+
     // ========================================
     // MANAGER REFERENCES
     // ========================================
@@ -289,6 +293,30 @@ public class BrickBehavior : MonoBehaviour
         LogDebug("StrengthenStructure() - Manually strengthening structure");
         connectionManager?.StrengthenGroupConnections();
         physicsManager?.StabilizeGroup();
+    }
+
+    public void Freeze(bool shouldFreeze)
+    {
+        if (grabInteractable == null || !IsGrabbed) return;
+
+        if (shouldFreeze)
+        {
+            LogDebug($"Freeze() - Freezing {name}");
+            // Store original tracking settings
+            originalTrackPosition = grabInteractable.trackPosition;
+            originalTrackRotation = grabInteractable.trackRotation;
+
+            // Disable tracking
+            grabInteractable.trackPosition = false;
+            grabInteractable.trackRotation = false;
+        }
+        else
+        {
+            LogDebug($"Freeze() - Un-freezing {name}");
+            // Restore original tracking settings
+            grabInteractable.trackPosition = originalTrackPosition;
+            grabInteractable.trackRotation = originalTrackRotation;
+        }
     }
 
     // ========================================
@@ -692,11 +720,10 @@ public class BrickBehavior : MonoBehaviour
             if (!snapExecuted)
             {
                 LogDebug($"OnGrabReleased() - No potential snap found in group.");
+                // Handle release logic through managers
+                connectionManager?.OnGrabReleased();
+                StartCoroutine(DelayedPhysicsManagerCall());
             }
-
-            // Handle release logic through managers
-            connectionManager?.OnGrabReleased();
-            StartCoroutine(DelayedPhysicsManagerCall());
         }
         else
         {
