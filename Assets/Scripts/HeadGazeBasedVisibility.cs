@@ -36,6 +36,7 @@ public class GazeBasedVisibility : MonoBehaviour
         if (playerCamera == null) return;
 
         // Vector from the camera to the object
+        // This assumes the script is attached to the object that should be visible based on gaze
         Vector3 directionToObject = transform.position - playerCamera.position;
 
         // Angle between the camera's forward direction and the object

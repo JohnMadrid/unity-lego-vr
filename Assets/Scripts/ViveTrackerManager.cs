@@ -35,25 +35,27 @@ public class ViveTrackerManager : MonoBehaviour
 
 
            foreach (var device in devices)
-           {
-               if (device.characteristics.HasFlag(InputDeviceCharacteristics.Controller))
-               {
-                   Vector3 position;
-                   Quaternion rotation;
-                  
-                   device.TryGetFeatureValue(CommonUsages.devicePosition, out position);
-                   device.TryGetFeatureValue(CommonUsages.deviceRotation, out rotation);
+            {
+                if (device.characteristics.HasFlag(InputDeviceCharacteristics.Controller))
+                {
+                    Vector3 position;
+                    Quaternion rotation;
 
+                    device.TryGetFeatureValue(CommonUsages.devicePosition, out position);
+                    device.TryGetFeatureValue(CommonUsages.deviceRotation, out rotation);
 
-                   string logEntry = $"{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()},{Time.time},{device.name}," +
-                                     $"{position.x},{position.y},{position.z}," +
-                                     $"{rotation.x},{rotation.y},{rotation.z},{rotation.w}";
+                    // Calculate InitialPose
+                    bool initialPose = PlaneTriggerColor.LeftFootOnPlane && PlaneTriggerColor.RightFootOnPlane;
 
+                    string logEntry = $"{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()},{Time.time},{device.name}," +
+                                    $"{position.x},{position.y},{position.z}," +
+                                    $"{rotation.x},{rotation.y},{rotation.z},{rotation.w}," +
+                                    $"{initialPose}";
 
-                   writer.WriteLine(logEntry);
-                   writer.Flush(); // Ensure data is written immediately
-               }
-           }
+                    writer.WriteLine(logEntry);
+                    writer.Flush();
+                }
+            }
        }
    }
 
