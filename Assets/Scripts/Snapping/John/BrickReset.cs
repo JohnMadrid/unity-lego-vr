@@ -12,7 +12,7 @@ public class BrickReset : MonoBehaviour
     private BrickBehavior _brickBehavior;
 
     public float resetDelay = 0.2f;
-    public float resetDuration = 1000f;
+    public float resetDuration = 0.5f;
 
     private bool _isResetting = false;
     
@@ -26,35 +26,41 @@ public class BrickReset : MonoBehaviour
         _initialRotation = transform.rotation;
         _brickBehavior = GetComponent<BrickBehavior>();
         
-        // Check if this is a board or brick
         bool isBoard = gameObject.CompareTag("Board");
-        if (enableDebugLogging)
+        if (_brickBehavior != null && _isResetting)
+        {
+            _brickBehavior.LogDebug("[BrickReset] DEBUG: Initialized at position " + _initialPosition, true); // ExtensiveDebug
+            _brickBehavior.LogDebug("[BrickReset] DEBUG: IsBoard: " + isBoard + ", Tag: " + gameObject.tag, true); // ExtensiveDebug
+            Rigidbody rb = GetComponent<Rigidbody>();
+            Collider col = GetComponent<Collider>();
+            _brickBehavior.LogDebug("[BrickReset] DEBUG: Rigidbody: " + (rb != null) + ", Collider: " + (col != null) + ", BrickBehavior: " + (_brickBehavior != null), true); // ExtensiveDebug
+            if (rb != null)
+                _brickBehavior.LogDebug("[BrickReset] DEBUG: Rigidbody - isKinematic: " + rb.isKinematic + ", useGravity: " + rb.useGravity, true); // ExtensiveDebug
+            if (col != null)
+                _brickBehavior.LogDebug("[BrickReset] DEBUG: Collider - isTrigger: " + col.isTrigger + ", enabled: " + col.enabled, true); // ExtensiveDebug
+        }
+        else if (enableDebugLogging && _isResetting)
         {
             Debug.Log($"[BrickReset] {gameObject.name}: Initialized at position {_initialPosition}");
             Debug.Log($"[BrickReset] {gameObject.name}: IsBoard: {isBoard}, Tag: {gameObject.tag}");
-            
-            // Check for required components
             Rigidbody rb = GetComponent<Rigidbody>();
             Collider col = GetComponent<Collider>();
-            var brickBehavior = GetComponent<BrickBehavior>();
-            
-            Debug.Log($"[BrickReset] {gameObject.name}: Rigidbody: {rb != null}, Collider: {col != null}, BrickBehavior: {brickBehavior != null}");
-            
+            Debug.Log($"[BrickReset] {gameObject.name}: Rigidbody: {rb != null}, Collider: {col != null}, BrickBehavior: {_brickBehavior != null}");
             if (rb != null)
-            {
                 Debug.Log($"[BrickReset] {gameObject.name}: Rigidbody - isKinematic: {rb.isKinematic}, useGravity: {rb.useGravity}");
-            }
-            
             if (col != null)
-            {
                 Debug.Log($"[BrickReset] {gameObject.name}: Collider - isTrigger: {col.isTrigger}, enabled: {col.enabled}");
-            }
         }
     }
 
     void OnCollisionEnter(Collision collision)
     {
-        if (enableDebugLogging)
+        if (_brickBehavior != null && _isResetting)
+        {
+            _brickBehavior.LogDebug($"[BrickReset] {gameObject.name}: Collision detected with {collision.gameObject.name} (Tag: {collision.gameObject.tag})", false); // NormalDebug
+            _brickBehavior.LogDebug($"[BrickReset] {gameObject.name}: Current state - isResetting: {_isResetting}", false); // NormalDebug
+        }
+        else if (enableDebugLogging && _isResetting)
         {
             Debug.Log($"[BrickReset] {gameObject.name}: Collision detected with {collision.gameObject.name} (Tag: {collision.gameObject.tag})");
             Debug.Log($"[BrickReset] {gameObject.name}: Current state - isResetting: {_isResetting}");
@@ -62,49 +68,56 @@ public class BrickReset : MonoBehaviour
         
         if (collision.gameObject.CompareTag("Floor") && !_isResetting)
         {
-            //if (enableDebugLogging)
-            //{
+            if (_brickBehavior != null)
+                _brickBehavior.LogDebug($"[BrickReset] {gameObject.name}: Starting reset routine - brick hit floor", false); // LiteDebug
+            else if (enableDebugLogging)
             Debug.Log($"[BrickReset] {gameObject.name}: Starting reset routine - brick hit floor");
-            //}
             InitiateGroupReset();
         }
         else if (_isResetting)
         {
-            if (enableDebugLogging)
-            {
+            if (_brickBehavior != null)
+                _brickBehavior.LogDebug($"[BrickReset] {gameObject.name}: Ignoring collision - already resetting", false); // NormalDebug
+            else if (enableDebugLogging)
                 Debug.Log($"[BrickReset] {gameObject.name}: Ignoring collision - already resetting");
-            }
         }
         else if (!collision.gameObject.CompareTag("Floor"))
         {
-            if (enableDebugLogging)
-            {
+            if (_brickBehavior != null)
+                _brickBehavior.LogDebug($"[BrickReset] {gameObject.name}: Ignoring collision - not with floor (tag: {collision.gameObject.tag})", false); // NormalDebug
+            else if (enableDebugLogging)
                 Debug.Log($"[BrickReset] {gameObject.name}: Ignoring collision - not with floor (tag: {collision.gameObject.tag})");
-            }
         }
     }
     
     // Prevent floor objects from grabbing this brick
     void OnTriggerEnter(Collider other)
     {
-        if (enableDebugLogging)
+        if (_brickBehavior != null && _isResetting)
+        {
+            _brickBehavior.LogDebug($"[BrickReset] {gameObject.name}: Trigger detected with {other.gameObject.name} (Tag: {other.gameObject.tag})", false); // NormalDebug
+        }
+        else if (enableDebugLogging && _isResetting)
         {
             Debug.Log($"[BrickReset] {gameObject.name}: Trigger detected with {other.gameObject.name} (Tag: {other.gameObject.tag})");
         }
         
         if (other.CompareTag("Floor"))
         {
-            // If the floor object has XR grab interactable, disable it
             var floorGrabInteractable = other.GetComponent<UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable>();
             if (floorGrabInteractable != null)
             {
                 floorGrabInteractable.enabled = false;
-                if (enableDebugLogging)
-                {
+                if (_brickBehavior != null && _isResetting)
+                    _brickBehavior.LogDebug($"[BrickReset] {gameObject.name}: Disabled XR Grab Interactable on floor object {other.name}", false); // NormalDebug
+                else if (enableDebugLogging && _isResetting)
                     Debug.Log($"[BrickReset] {gameObject.name}: Disabled XR Grab Interactable on floor object {other.name}");
                 }
+            else if (_brickBehavior != null && _isResetting)
+            {
+                _brickBehavior.LogDebug($"[BrickReset] {gameObject.name}: Floor object {other.name} has no XR Grab Interactable", false); // NormalDebug
             }
-            else if (enableDebugLogging)
+            else if (enableDebugLogging && _isResetting)
             {
                 Debug.Log($"[BrickReset] {gameObject.name}: Floor object {other.name} has no XR Grab Interactable");
             }
@@ -115,20 +128,22 @@ public class BrickReset : MonoBehaviour
     {
         if (_isResetting)
         {
-            if (enableDebugLogging)
-            {
+            if (_brickBehavior != null && _isResetting)
+                _brickBehavior.LogDebug($"[BrickReset] {gameObject.name}: Group reset already in progress, ignoring request.", false); // NormalDebug
+            else if (enableDebugLogging && _isResetting)
                 Debug.Log($"[BrickReset] {gameObject.name}: Group reset already in progress, ignoring request.");
-            }
             return;
         }
 
         if (_brickBehavior == null)
         {
-            if (enableDebugLogging)
+            if (_isResetting)
             {
+                if (_brickBehavior != null)
+                    _brickBehavior.LogWarning($"[BrickReset] {gameObject.name}: Cannot initiate group reset, BrickBehavior is null.", false); // LiteDebug
+                else if (enableDebugLogging)
                 Debug.LogWarning($"[BrickReset] {gameObject.name}: Cannot initiate group reset, BrickBehavior is null.");
             }
-            // Fallback to individual reset if no BrickBehavior
             StartCoroutine(ResetRoutine(new System.Collections.Generic.List<BrickReset> { this }));
             return;
         }
@@ -157,17 +172,17 @@ public class BrickReset : MonoBehaviour
             brick._isResetting = true;
         }
 
-        if (enableDebugLogging)
-        {
+        if (_brickBehavior != null && _isResetting)
+            _brickBehavior.LogDebug($"[BrickReset] {gameObject.name}: Reset routine started for group of {bricksToReset.Count} bricks.", false); // LiteDebug
+        else if (enableDebugLogging && _isResetting)
             Debug.Log($"[BrickReset] {gameObject.name}: Reset routine started for group of {bricksToReset.Count} bricks.");
-        }
 
         yield return new WaitForSeconds(resetDelay);
         
-        if (enableDebugLogging)
-        {
+        if (_brickBehavior != null && _isResetting)
+            _brickBehavior.LogDebug($"[BrickReset] {gameObject.name}: Reset delay completed, starting movement for group.", false); // LiteDebug
+        else if (enableDebugLogging && _isResetting)
             Debug.Log($"[BrickReset] {gameObject.name}: Reset delay completed, starting movement for group.");
-        }
 
         // --- NEW: Calculate target rotation for the group to be upright ---
         var initiator = this;
@@ -225,9 +240,9 @@ public class BrickReset : MonoBehaviour
             brick._isResetting = false;
         }
 
-        if (enableDebugLogging)
-        {
+        if (_brickBehavior != null && _isResetting)
+            _brickBehavior.LogDebug($"[BrickReset] {gameObject.name}: Group reset routine finished.", false); // LiteDebug
+        else if (enableDebugLogging && _isResetting)
             Debug.Log($"[BrickReset] {gameObject.name}: Group reset routine finished.");
-        }
     }
 }

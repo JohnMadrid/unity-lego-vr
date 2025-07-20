@@ -735,6 +735,10 @@ public class BrickSnappingSystem
         // Start a coroutine to stabilize the group after a short delay
         brick.StartCoroutine(StabilizeGroupAfterSnap());
         
+        // --- MULTI-SNAP CONTINUATION ---
+        brick.LogDebug($"FinalizeSnap() - Calling OnSnapFinalized_MultiSnap for multi-snap continuation", true);
+        brick.OnSnapFinalized_MultiSnap();
+        
         brick.LogDebug($" FinalizeSnap() - Snap finalization complete");
     }
 

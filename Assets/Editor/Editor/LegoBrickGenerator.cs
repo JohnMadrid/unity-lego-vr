@@ -311,7 +311,7 @@ public static class LegoBrickGenerator
 
             var studCollider = new GameObject($"stud_top_{topStudIndex++}");
             studCollider.transform.SetParent(board.transform, false);
-            studCollider.transform.localPosition = new Vector3(posX, posY, -PLATE_HEIGHT / 2f);
+            studCollider.transform.localPosition = new Vector3(posX, posY, -(PLATE_HEIGHT / 2f + STUD_HEIGHT / 2f));
             
             var sph = studCollider.AddComponent<SphereCollider>();
             sph.radius = STUD_RADIUS * 1.33f; // 33% larger than brick studs
