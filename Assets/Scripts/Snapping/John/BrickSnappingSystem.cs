@@ -18,10 +18,44 @@ public class BrickSnappingSystem
         this.studManager = studManager;
     }
 
-    // This is the core method, called by a Stud when it collides with another valid stud.
-    public void RequestSnap(Stud ourStud, Stud targetStud)
+    // ========================================
+
+    private struct StoredSnap
     {
-        brick.LogDebug($"RequestSnap() - Request from stud '{ourStud.name}' to target stud '{targetStud.name}'");
+        public Stud fromStud;
+        public Stud toStud;
+    }
+    private StoredSnap? storedSnap;
+
+    public void StorePotentialSnap(Stud fromStud, Stud toStud)
+    {
+        storedSnap = new StoredSnap { fromStud = fromStud, toStud = toStud };
+    }
+
+    // Called from BrickBehavior.OnGrabReleased()
+    public void ExecuteStoredSnap(Vector3 releasePosition, Quaternion releaseRotation)
+    {
+        if (storedSnap.HasValue)
+        {
+            var snap = storedSnap.Value;
+            brick.LogDebug($"ExecuteStoredSnap() - Executing stored snap from {snap.fromStud.name} to {snap.toStud.name}");
+            RequestSnap(snap.fromStud, snap.toStud, releasePosition, releaseRotation);
+            storedSnap = null;
+        }
+    }
+
+    public bool HasStoredSnap => storedSnap.HasValue;
+
+    // Overload for calls without a specific release pose
+    public void RequestSnap(Stud myStud, Stud targetStud)
+    {
+        RequestSnap(myStud, targetStud, brick.transform.position, brick.transform.rotation);
+    }
+
+    // This is the core method, called by a Stud when it collides with another valid stud.
+    public void RequestSnap(Stud myStud, Stud targetStud, Vector3 releasePosition, Quaternion releaseRotation)
+    {
+        brick.LogDebug($"RequestSnap() - Request from stud '{myStud.name}' to target stud '{targetStud.name}'");
         
         if (brick.GetComponent<BrickBehavior>().isSnapping)
         {
@@ -89,21 +123,21 @@ public class BrickSnappingSystem
             brick.LogDebug($"RequestSnap() - DEBUG: Relative Z rotation is {relativeZ:F1}°, not a standard LEGO alignment!", false);
         }
 
-        brick.LogDebug($"RequestSnap() - DEBUG: Our stud world position: {ourStud.transform.position}", false);
+        brick.LogDebug($"RequestSnap() - DEBUG: Our stud world position: {myStud.transform.position}", false);
         brick.LogDebug($"RequestSnap() - DEBUG: Target stud world position: {targetStud.transform.position}", false);
-        brick.LogDebug($"RequestSnap() - DEBUG: Distance between studs: {Vector3.Distance(ourStud.transform.position, targetStud.transform.position):F6}", false);
-        brick.LogDebug($"RequestSnap() - DEBUG: Our stud local position: {ourStud.transform.localPosition}", false);
+        brick.LogDebug($"RequestSnap() - DEBUG: Distance between studs: {Vector3.Distance(myStud.transform.position, targetStud.transform.position):F6}", false);
+        brick.LogDebug($"RequestSnap() - DEBUG: Our stud local position: {myStud.transform.localPosition}", false);
         brick.LogDebug($"RequestSnap() - DEBUG: Target stud local position: {targetStud.transform.localPosition}", false);
 
         // Validate stud compatibility
-        if (ourStud.Type == targetStud.Type)
+        if (myStud.Type == targetStud.Type)
         {
-            brick.LogWarning($"RequestSnap() - WARNING: Cannot snap {ourStud.Type} to {targetStud.Type}!");
+            brick.LogWarning($"RequestSnap() - WARNING: Cannot snap {myStud.Type} to {targetStud.Type}!");
             return;
         }
 
         // Check if there are multiple potential snap points
-        List<Stud> potentialSnapPoints = FindPotentialSnapPoints(ourStud, targetBrick);
+        List<Stud> potentialSnapPoints = FindPotentialSnapPoints(myStud, targetBrick);
         brick.LogDebug($"RequestSnap() - Found {potentialSnapPoints.Count} potential snap points", true);
 
         if (potentialSnapPoints.Count == 0)
@@ -118,7 +152,7 @@ public class BrickSnappingSystem
             brick.LogDebug($"RequestSnap() - Multiple snap points detected, finding best overall alignment", true);
             
             // Find the best alignment that maximizes the number of connecting studs
-            Stud bestTargetStud = FindBestMultiStudAlignment(ourStud, potentialSnapPoints, targetBrick);
+            Stud bestTargetStud = FindBestMultiStudAlignment(myStud, potentialSnapPoints, targetBrick);
             if (bestTargetStud != null)
             {
                 targetStud = bestTargetStud;
@@ -127,7 +161,7 @@ public class BrickSnappingSystem
             else
             {
                 brick.LogWarning($"RequestSnap() - WARNING: Could not find good multi-stud alignment, falling back to single stud", true);
-                targetStud = ChooseBestSnapPoint(ourStud, potentialSnapPoints);
+                targetStud = ChooseBestSnapPoint(myStud, potentialSnapPoints);
             }
         }
         else
@@ -140,9 +174,9 @@ public class BrickSnappingSystem
         Vector3 initialTargetRotation = targetBrick.transform.rotation.eulerAngles;
         brick.LogDebug($"RequestSnap() - DEBUG: Target brick initial rotation: {initialTargetRotation}", false);
 
-        // Calculate snap position and rotation
+        // Calculate snap position and rotation using the release pose
         brick.LogDebug($"RequestSnap() - About to call CalculateSnapTransform", true);
-        CalculateSnapTransform(ourStud, targetStud, targetBrick);
+        CalculateSnapTransform(myStud, targetStud, targetBrick, releasePosition, releaseRotation);
         brick.LogDebug($"RequestSnap() - CalculateSnapTransform completed", true);
         
         // Check if target brick rotation changed during calculation
@@ -186,7 +220,7 @@ public class BrickSnappingSystem
         snapTargetBrick = targetBrick;
 
         // Update stud states to show snapping
-        ourStud.SetSnapping(true);
+        myStud.SetSnapping(true);
         targetStud.SetSnapping(true);
 
         brick.LogDebug($"RequestSnap() - Snap initiated. Target position: {targetSnapPosition}, Target rotation: {targetSnapRotation.eulerAngles}", true);
@@ -195,29 +229,29 @@ public class BrickSnappingSystem
         brick.LogDebug($"RequestSnap() - DEBUG: Rotation difference: {Quaternion.Angle(brick.transform.rotation, targetSnapRotation):F2}°", false);
     }
 
-    private void CalculateSnapTransform(Stud ourStud, Stud targetStud, BrickBehavior targetBrick)
+    private void CalculateSnapTransform(Stud myStud, Stud targetStud, BrickBehavior targetBrick, Vector3 releasePosition, Quaternion releaseRotation)
     {
-        brick.LogDebug($"CalculateSnapTransform() - Calculating snap transform for {ourStud.Type} to {targetStud.Type}", true);
+        brick.LogDebug($"CalculateSnapTransform() - Calculating snap transform for {myStud.Type} to {targetStud.Type}", true);
         brick.LogDebug($"CalculateSnapTransform() - DEBUG: Our brick position: {brick.transform.position}", false);
         brick.LogDebug($"CalculateSnapTransform() - DEBUG: Target brick position: {targetBrick.transform.position}", false);
 
         // Validate stud compatibility
-        if (ourStud.Type == targetStud.Type)
+        if (myStud.Type == targetStud.Type)
         {
-            brick.LogWarning($"CalculateSnapTransform() - WARNING: Cannot snap {ourStud.Type} to {targetStud.Type}!");
+            brick.LogWarning($"CalculateSnapTransform() - WARNING: Cannot snap {myStud.Type} to {targetStud.Type}!");
             return;
         }
 
         // Get the world positions of the studs
-        Vector3 ourStudWorldPos = ourStud.transform.position;
+        Vector3 myStudWorldPos = myStud.transform.position;
         Vector3 targetStudWorldPos = targetStud.transform.position;
         
-        brick.LogDebug($"CalculateSnapTransform() - DEBUG: Stud positions: Our={ourStudWorldPos}, Target={targetStudWorldPos}", false);
+        brick.LogDebug($"CalculateSnapTransform() - DEBUG: Stud positions: Our={myStudWorldPos}, Target={targetStudWorldPos}", false);
 
         // STEP 1: Calculate final position assuming brick matches target brick rotation on all axes
         // Get our stud's local position relative to our brick
-        Vector3 ourStudLocalPos = ourStud.transform.localPosition;
-        brick.LogDebug($"CalculateSnapTransform() - DEBUG: Our stud local position: {ourStudLocalPos}", false);
+        Vector3 myStudLocalPos = myStud.transform.localPosition;
+        brick.LogDebug($"CalculateSnapTransform() - DEBUG: Our stud local position: {myStudLocalPos}", false);
 
         // First, assume the brick will have the same rotation as the target brick (for position calculation)
         Quaternion targetBrickRotation = targetBrick.transform.rotation;
@@ -245,14 +279,14 @@ public class BrickSnappingSystem
         brick.LogDebug($"CalculateSnapTransform() - DEBUG: Final rotation: {finalRotation.eulerAngles}", false);
         
         // Calculate where our stud will be in the final rotation
-        Vector3 ourStudInFinalRotation = finalRotation * ourStudLocalPos;
+        Vector3 myStudInFinalRotation = finalRotation * myStudLocalPos;
         
         // Calculate final position: target stud position - our stud position in final rotation
-        Vector3 finalPosition = targetStudWorldPos - ourStudInFinalRotation;
+        Vector3 finalPosition = targetStudWorldPos - myStudInFinalRotation;
         
-        brick.LogDebug($"CalculateSnapTransform() - DEBUG: Our stud local position: {ourStudLocalPos}", false);
-        brick.LogDebug($"CalculateSnapTransform() - DEBUG: Our stud in final rotation: {ourStudInFinalRotation}", false);
-        brick.LogDebug($"CalculateSnapTransform() - DEBUG: Initial position calculation: {targetStudWorldPos} - {ourStudInFinalRotation} = {finalPosition}", false);
+        brick.LogDebug($"CalculateSnapTransform() - DEBUG: Our stud local position: {myStudLocalPos}", false);
+        brick.LogDebug($"CalculateSnapTransform() - DEBUG: Our stud in final rotation: {myStudInFinalRotation}", false);
+        brick.LogDebug($"CalculateSnapTransform() - DEBUG: Initial position calculation: {targetStudWorldPos} - {myStudInFinalRotation} = {finalPosition}", false);
         
         // Calculate offset using the direction from relative target brick center to target stud
         // This creates a "relative target brick center" that works for any brick size
@@ -275,10 +309,10 @@ public class BrickSnappingSystem
         brick.LogDebug($"CalculateSnapTransform() - DEBUG: Distance from target stud to our brick center: {distanceFromTargetStudToOurBrick:F3}", false);
         
         // Calculate the optimal distance: target stud to our brick center = our stud to our brick center + tolerance
-        float ourStudToBrickCenterDistance = Vector3.Distance(ourStud.transform.position, brick.transform.position);
-        float optimalDistance = ourStudToBrickCenterDistance + 0.001f; // 1mm tolerance
+        float myStudToBrickCenterDistance = Vector3.Distance(myStud.transform.position, brick.transform.position);
+        float optimalDistance = myStudToBrickCenterDistance + 0.001f; // 1mm tolerance
         
-        brick.LogDebug($"CalculateSnapTransform() - DEBUG: Our stud to brick center distance: {ourStudToBrickCenterDistance:F3}", false);
+        brick.LogDebug($"CalculateSnapTransform() - DEBUG: Our stud to brick center distance: {myStudToBrickCenterDistance:F3}", false);
         brick.LogDebug($"CalculateSnapTransform() - DEBUG: Optimal distance: {optimalDistance:F3}", false);
         
         // If the distance from target stud to our brick center is too large, adjust the position to bring them closer
@@ -311,13 +345,13 @@ public class BrickSnappingSystem
 
         // ADD DEBUGGING: Show expected snap point positions after transformation
         // Calculate where our stud will be after the brick is moved and rotated
-        Vector3 expectedOurStudPosition = finalPosition + (finalRotation * ourStudLocalPos);
+        Vector3 expectedMyStudPosition = finalPosition + (finalRotation * myStudLocalPos);
         
         brick.LogDebug($"CalculateSnapTransform() - DEBUG: EXPECTED SNAP POINT ALIGNMENT:", false);
-        brick.LogDebug($"CalculateSnapTransform() - DEBUG: Expected our stud position: {expectedOurStudPosition}", false);
+        brick.LogDebug($"CalculateSnapTransform() - DEBUG: Expected our stud position: {expectedMyStudPosition}", false);
         brick.LogDebug($"CalculateSnapTransform() - DEBUG: Target stud position: {targetStudWorldPos}", false);
-        brick.LogDebug($"CalculateSnapTransform() - DEBUG: Alignment difference: {expectedOurStudPosition - targetStudWorldPos}", false);
-        brick.LogDebug($"CalculateSnapTransform() - DEBUG: Alignment distance: {Vector3.Distance(expectedOurStudPosition, targetStudWorldPos):F6}", false);
+        brick.LogDebug($"CalculateSnapTransform() - DEBUG: Alignment difference: {expectedMyStudPosition - targetStudWorldPos}", false);
+        brick.LogDebug($"CalculateSnapTransform() - DEBUG: Alignment distance: {Vector3.Distance(expectedMyStudPosition, targetStudWorldPos):F6}", false);
 
         targetSnapPosition = finalPosition;
         targetSnapRotation = finalRotation;
@@ -326,7 +360,7 @@ public class BrickSnappingSystem
         brick.LogDebug($"CalculateSnapTransform() - Set targetSnapRotation: {targetSnapRotation.eulerAngles}", true);
         
         // Debug visualization - draw lines to show the snap alignment
-        Debug.DrawLine(ourStudWorldPos, targetStudWorldPos, Color.green, 2f);
+        Debug.DrawLine(myStudWorldPos, targetStudWorldPos, Color.green, 2f);
         Debug.DrawLine(brick.transform.position, finalPosition, Color.red, 2f);
         brick.LogDebug($"CalculateSnapTransform() - DEBUG: Debug lines drawn: Green=stud alignment, Red=brick movement", false);
         
@@ -506,26 +540,57 @@ public class BrickSnappingSystem
         // BUT if the target is a board, we don't want to join its group
         BrickBehavior targetMaster = targetBrick.IsBoard ? brick : targetBrick.MasterBrick;
 
+        // --- BEGIN TWO-CONTROLLER FIX ---
+        Rigidbody jointTargetRigidbody = null;
+        if (!targetBrick.IsBoard)
+        {
+            // Get all bricks in the target's group
+            List<BrickBehavior> groupBricks = new List<BrickBehavior>();
+            BrickGroupUtils.FindAllConnectedInGroup(targetBrick, groupBricks, targetBrick.name);
+            // Check if any brick in the group is grabbed
+            bool groupIsGrabbed = false;
+            BrickBehavior grabbedMaster = null;
+            foreach (var groupBrick in groupBricks)
+            {
+                if (groupBrick.IsGrabbed)
+                {
+                    groupIsGrabbed = true;
+                    grabbedMaster = groupBrick.MasterBrick;
+                    break;
+                }
+            }
+            if (groupIsGrabbed && grabbedMaster != null)
+            {
+                // Connect to the master brick's Rigidbody (the one being held)
+                jointTargetRigidbody = grabbedMaster.GetComponent<Rigidbody>();
+                brick.LogDebug($"FinalizeSnap() - Two-controller scenario: Connecting joint to held group's master brick: {grabbedMaster.name}");
+            }
+            else
+            {
+                // Default: connect to the target brick's Rigidbody
+                jointTargetRigidbody = targetBrick.GetComponent<Rigidbody>();
+                brick.LogDebug($"FinalizeSnap() - Normal scenario: Connecting joint to target brick: {targetBrick.name}");
+            }
+        }
+        // --- END TWO-CONTROLLER FIX ---
+
         // Create a Fixed Joint to connect this brick to the target
         // BUT don't create joints when snapping to boards
         if (!targetBrick.IsBoard)
         {
-        FixedJoint joint = brick.gameObject.AddComponent<FixedJoint>();
-        joint.connectedBody = targetBrick.GetComponent<Rigidbody>();
-        joint.breakForce = float.PositiveInfinity;
-        joint.breakTorque = float.PositiveInfinity;
-        
-        // Configure joint for better stability with dynamic objects
-        joint.enableCollision = false; // Prevent collision between connected objects
-        joint.enablePreprocessing = true; // Enable preprocessing for better stability
-        
-        // IMPORTANT: Configure joint for maximum rigidity
-        joint.anchor = Vector3.zero; // Anchor at the center of the joint
-        joint.axis = Vector3.zero; // No specific axis constraint
-        
-        // IMPORTANT: Store the joint in the connection manager for proper group tracking
-        brick.SetJoint(joint);
-            brick.LogDebug($" FinalizeSnap() - Stored joint in connection manager: {joint} connecting to {targetBrick.name}");
+            FixedJoint joint = brick.gameObject.AddComponent<FixedJoint>();
+            joint.connectedBody = jointTargetRigidbody;
+            joint.breakForce = float.PositiveInfinity;
+            joint.breakTorque = float.PositiveInfinity;
+            // Configure joint for better stability with dynamic objects
+            joint.enableCollision = false; // Prevent collision between connected objects
+            joint.enablePreprocessing = true; // Enable preprocessing for better stability
+            // IMPORTANT: Configure joint for maximum rigidity
+            joint.anchor = Vector3.zero; // Anchor at the center of the joint
+            joint.axis = Vector3.zero; // No specific axis constraint
+            // IMPORTANT: Store the joint in the connection manager for proper group tracking
+            brick.SetJoint(joint);
+            brick.LogDebug($" FinalizeSnap() - Stored joint in connection manager: {joint} connecting to {jointTargetRigidbody?.gameObject.name}");
         }
         else
         {
@@ -533,8 +598,8 @@ public class BrickSnappingSystem
         }
         
         // Set mass properties to make the connection more rigid
-        // BUT only for non-board bricks
-        if (!brick.IsBoard && brick.GetComponent<Rigidbody>() != null)
+        // BUT only for non-board bricks and only if not currently grabbed
+        if (!brick.IsBoard && brick.GetComponent<Rigidbody>() != null && !brick.IsGrabbed)
         {
             var brickRb = brick.GetComponent<Rigidbody>();
             brick.LogDebug($" FinalizeSnap() - DEBUG: Physics before joint creation - isKinematic: {brickRb.isKinematic}, useGravity: {brickRb.useGravity}", false);
@@ -555,18 +620,29 @@ public class BrickSnappingSystem
         {
             brick.LogDebug($" FinalizeSnap() - Skipping physics restoration for board", true);
         }
-        
-    // IMPORTANT: Also restore physics on target brick
-    // BUT only for non-board bricks
-        if (!targetBrick.IsBoard && targetBrick.GetComponent<Rigidbody>() != null)
+        else if (brick.IsGrabbed)
         {
-        var targetRb = targetBrick.GetComponent<Rigidbody>();
-        targetRb.isKinematic = false;
-        targetRb.useGravity = true;
-        targetRb.mass = 1.0f; // Normalize mass to prevent group weight accumulation
-        targetRb.linearDamping = brick.brickDrag;
-        targetRb.angularDamping = brick.brickAngularDrag;
-        brick.LogDebug($" FinalizeSnap() - Restored physics on target brick: isKinematic=false, useGravity=true");
+            brick.LogDebug($" FinalizeSnap() - Skipping physics restoration for grabbed brick (XR system controls physics)", true);
+        }
+        
+    // IMPORTANT: Also restore physics on target brick (or master brick in two-controller scenario)
+    // BUT only for non-board bricks and only if not currently grabbed
+        if (!targetBrick.IsBoard && jointTargetRigidbody != null)
+        {
+            BrickBehavior targetBehavior = jointTargetRigidbody.GetComponent<BrickBehavior>();
+            if (targetBehavior != null && !targetBehavior.IsGrabbed)
+            {
+                targetBehavior.GetComponent<Rigidbody>().isKinematic = false;
+                targetBehavior.GetComponent<Rigidbody>().useGravity = true;
+                targetBehavior.GetComponent<Rigidbody>().mass = 1.0f; // Normalize mass
+                targetBehavior.GetComponent<Rigidbody>().linearDamping = brick.brickDrag;
+                targetBehavior.GetComponent<Rigidbody>().angularDamping = brick.brickAngularDrag;
+                brick.LogDebug($" FinalizeSnap() - Restored physics on target/master brick: isKinematic=false, useGravity=true");
+            }
+            else if (targetBehavior != null && targetBehavior.IsGrabbed)
+            {
+                brick.LogDebug($" FinalizeSnap() - Skipping physics restoration for grabbed target/master brick (XR system controls physics)", true);
+            }
         }
         else if (targetBrick.IsBoard)
         {
@@ -637,47 +713,47 @@ public class BrickSnappingSystem
         
         // Find the closest stud pair to validate alignment
         float minDistance = float.MaxValue;
-        Stud closestOurStud = null;
+        Stud closestMyStud = null;
         Stud closestTargetStud = null;
         
         // Check all our studs against all target studs
-        foreach (var ourStud in studManager.TopStuds)
+        foreach (var myStud in studManager.TopStuds)
         {
             foreach (var targetStud in targetBrick.BottomStuds)
             {
-                float distance = Vector3.Distance(ourStud.transform.position, targetStud.transform.position);
+                float distance = Vector3.Distance(myStud.transform.position, targetStud.transform.position);
                 if (distance < minDistance)
                 {
                     minDistance = distance;
-                    closestOurStud = ourStud;
+                    closestMyStud = myStud;
                     closestTargetStud = targetStud;
                 }
             }
         }
         
-        foreach (var ourStud in studManager.BottomStuds)
+        foreach (var myStud in studManager.BottomStuds)
         {
             foreach (var targetStud in targetBrick.TopStuds)
             {
-                float distance = Vector3.Distance(ourStud.transform.position, targetStud.transform.position);
+                float distance = Vector3.Distance(myStud.transform.position, targetStud.transform.position);
                 if (distance < minDistance)
                 {
                     minDistance = distance;
-                    closestOurStud = ourStud;
+                    closestMyStud = myStud;
                     closestTargetStud = targetStud;
                 }
             }
         }
         
-        brick.LogDebug($" ValidateAndCorrectAlignment() - Closest stud pair: {closestOurStud?.name} to {closestTargetStud?.name}, distance: {minDistance}");
+        brick.LogDebug($" ValidateAndCorrectAlignment() - Closest stud pair: {closestMyStud?.name} to {closestTargetStud?.name}, distance: {minDistance}");
         
         // ADD DETAILED SNAP POINT ALIGNMENT DEBUGGING
-        if (closestOurStud != null && closestTargetStud != null)
+        if (closestMyStud != null && closestTargetStud != null)
         {
             brick.LogDebug($" ValidateAndCorrectAlignment() - DEBUG: DETAILED ALIGNMENT CHECK:", false);
-            brick.LogDebug($" ValidateAndCorrectAlignment() - DEBUG: Our stud '{closestOurStud.name}' position: {closestOurStud.transform.position}", false);
+            brick.LogDebug($" ValidateAndCorrectAlignment() - DEBUG: Our stud '{closestMyStud.name}' position: {closestMyStud.transform.position}", false);
             brick.LogDebug($" ValidateAndCorrectAlignment() - DEBUG: Target stud '{closestTargetStud.name}' position: {closestTargetStud.transform.position}", false);
-            brick.LogDebug($" ValidateAndCorrectAlignment() - DEBUG: Position difference: {closestOurStud.transform.position - closestTargetStud.transform.position}", false);
+            brick.LogDebug($" ValidateAndCorrectAlignment() - DEBUG: Position difference: {closestMyStud.transform.position - closestTargetStud.transform.position}", false);
             brick.LogDebug($" ValidateAndCorrectAlignment() - DEBUG: Distance: {minDistance:F6}", false);
             brick.LogDebug($" ValidateAndCorrectAlignment() - DEBUG: Snap tolerance: {brick.snapTolerance:F6}", false);
             brick.LogDebug($" ValidateAndCorrectAlignment() - DEBUG: Our brick position: {brick.transform.position}", false);
@@ -709,21 +785,21 @@ public class BrickSnappingSystem
         }
     }
 
-    private List<Stud> FindPotentialSnapPoints(Stud ourStud, BrickBehavior targetBrick)
+    private List<Stud> FindPotentialSnapPoints(Stud myStud, BrickBehavior targetBrick)
     {
         List<Stud> potentialPoints = new List<Stud>();
         
         // Get all studs on the target brick that are compatible with our stud
-        List<Stud> targetStuds = (ourStud.Type == Stud.StudType.Top) ? targetBrick.BottomStuds : targetBrick.TopStuds;
+        List<Stud> targetStuds = (myStud.Type == Stud.StudType.Top) ? targetBrick.BottomStuds : targetBrick.TopStuds;
         
-        brick.LogDebug($" FindPotentialSnapPoints() - Looking for {ourStud.Type} studs on target brick ({targetStuds.Count} found)");
+        brick.LogDebug($" FindPotentialSnapPoints() - Looking for {myStud.Type} studs on target brick ({targetStuds.Count} found)");
         
         // First, find all studs within a reasonable detection range
         List<Stud> nearbyStuds = new List<Stud>();
         float snapTolerance = brick.snapTolerance; // Use BrickBehavior's snapTolerance
         foreach (var targetStud in targetStuds)
         {
-            float distance = Vector3.Distance(ourStud.transform.position, targetStud.transform.position);
+            float distance = Vector3.Distance(myStud.transform.position, targetStud.transform.position);
             
             // Use a tighter detection range to avoid false positives
             if (distance < snapTolerance * 1.5f) // Reduced from 2x to 1.5x
@@ -815,7 +891,7 @@ public class BrickSnappingSystem
         return brick.ConnectedNeighbors.Contains(targetBrick);
     }
     
-    private Stud ChooseBestSnapPoint(Stud ourStud, List<Stud> potentialPoints)
+    private Stud ChooseBestSnapPoint(Stud myStud, List<Stud> potentialPoints)
     {
         Stud bestStud = null;
         float bestDistance = float.MaxValue;
@@ -831,7 +907,7 @@ public class BrickSnappingSystem
         if (potentialPoints.Count == 1)
         {
             bestStud = potentialPoints[0];
-            bestDistance = Vector3.Distance(ourStud.transform.position, bestStud.transform.position);
+            bestDistance = Vector3.Distance(myStud.transform.position, bestStud.transform.position);
             brick.LogDebug($" ChooseBestSnapPoint() - Only one potential point, selecting {bestStud.name}");
             return bestStud;
         }
@@ -839,7 +915,7 @@ public class BrickSnappingSystem
         // Multiple points - find the closest one
         foreach (var potentialStud in potentialPoints)
         {
-            float distance = Vector3.Distance(ourStud.transform.position, potentialStud.transform.position);
+            float distance = Vector3.Distance(myStud.transform.position, potentialStud.transform.position);
             
             if (distance < bestDistance)
             {
@@ -867,7 +943,7 @@ public class BrickSnappingSystem
     }
 
     // Method to find the best alignment for multiple stud connections
-    private Stud FindBestMultiStudAlignment(Stud ourStud, List<Stud> potentialPoints, BrickBehavior targetBrick)
+    private Stud FindBestMultiStudAlignment(Stud myStud, List<Stud> potentialPoints, BrickBehavior targetBrick)
     {
         brick.LogDebug($" FindBestMultiStudAlignment() - Finding best alignment for {potentialPoints.Count} potential points");
         
@@ -881,7 +957,7 @@ public class BrickSnappingSystem
             brick.LogDebug($" FindBestMultiStudAlignment() - Testing primary target: {primaryTargetStud.name}");
             
             // Calculate the position our brick would be in if we connected to this stud
-            Vector3 testPosition = CalculateTestPosition(ourStud, primaryTargetStud, targetBrick);
+            Vector3 testPosition = CalculateTestPosition(myStud, primaryTargetStud, targetBrick);
             Quaternion testRotation = targetBrick.transform.rotation;
             
             // Count how many of our studs would connect to target studs at this position
@@ -891,10 +967,10 @@ public class BrickSnappingSystem
             
             // Prefer more connecting studs, then closer distance
             if (connectingStuds > maxConnectingStuds || 
-                (connectingStuds == maxConnectingStuds && Vector3.Distance(ourStud.transform.position, primaryTargetStud.transform.position) < bestDistance))
+                (connectingStuds == maxConnectingStuds && Vector3.Distance(myStud.transform.position, primaryTargetStud.transform.position) < bestDistance))
             {
                 maxConnectingStuds = connectingStuds;
-                bestDistance = Vector3.Distance(ourStud.transform.position, primaryTargetStud.transform.position);
+                bestDistance = Vector3.Distance(myStud.transform.position, primaryTargetStud.transform.position);
                 bestTargetStud = primaryTargetStud;
                 brick.LogDebug($" FindBestMultiStudAlignment() - New best: {primaryTargetStud.name} with {connectingStuds} connections");
             }
@@ -913,15 +989,15 @@ public class BrickSnappingSystem
     }
     
     // Helper method to calculate test position for alignment checking
-    private Vector3 CalculateTestPosition(Stud ourStud, Stud targetStud, BrickBehavior targetBrick)
+    private Vector3 CalculateTestPosition(Stud myStud, Stud targetStud, BrickBehavior targetBrick)
     {
         // Use the same logic as CalculateSnapTransform but return the position without setting it
-        Vector3 ourStudLocalPos = ourStud.transform.localPosition;
+        Vector3 myStudLocalPos = myStud.transform.localPosition;
         Vector3 targetStudWorldPos = targetStud.transform.position;
         Quaternion targetBrickRotation = targetBrick.transform.rotation;
         
-        Vector3 ourStudInTargetSpace = targetBrickRotation * ourStudLocalPos;
-        Vector3 testPosition = targetStudWorldPos - ourStudInTargetSpace;
+        Vector3 myStudInTargetSpace = targetBrickRotation * myStudLocalPos;
+        Vector3 testPosition = targetStudWorldPos - myStudInTargetSpace;
         
         return testPosition;
     }
@@ -932,16 +1008,16 @@ public class BrickSnappingSystem
         int connectingCount = 0;
         
         // Check all our studs against all target studs
-        foreach (var ourStud in studManager.TopStuds)
+        foreach (var myStud in studManager.TopStuds)
         {
             // Calculate where this stud would be at the test position
-            Vector3 ourStudLocalPos = ourStud.transform.localPosition;
-            Vector3 ourStudInTestSpace = testRotation * ourStudLocalPos;
-            Vector3 ourStudWorldPos = testPosition + ourStudInTestSpace;
+            Vector3 myStudLocalPos = myStud.transform.localPosition;
+            Vector3 myStudInTestSpace = testRotation * myStudLocalPos;
+            Vector3 myStudWorldPos = testPosition + myStudInTestSpace;
             
             foreach (var targetStud in targetBrick.BottomStuds)
             {
-                float distance = Vector3.Distance(ourStudWorldPos, targetStud.transform.position);
+                float distance = Vector3.Distance(myStudWorldPos, targetStud.transform.position);
                 if (distance < brick.snapTolerance)
                 {
                     connectingCount++;
@@ -949,16 +1025,16 @@ public class BrickSnappingSystem
             }
         }
         
-        foreach (var ourStud in studManager.BottomStuds)
+        foreach (var myStud in studManager.BottomStuds)
         {
             // Calculate where this stud would be at the test position
-            Vector3 ourStudLocalPos = ourStud.transform.localPosition;
-            Vector3 ourStudInTestSpace = testRotation * ourStudLocalPos;
-            Vector3 ourStudWorldPos = testPosition + ourStudInTestSpace;
+            Vector3 myStudLocalPos = myStud.transform.localPosition;
+            Vector3 myStudInTestSpace = testRotation * myStudLocalPos;
+            Vector3 myStudWorldPos = testPosition + myStudInTestSpace;
             
             foreach (var targetStud in targetBrick.TopStuds)
             {
-                float distance = Vector3.Distance(ourStudWorldPos, targetStud.transform.position);
+                float distance = Vector3.Distance(myStudWorldPos, targetStud.transform.position);
                 if (distance < brick.snapTolerance)
                 {
                     connectingCount++;
