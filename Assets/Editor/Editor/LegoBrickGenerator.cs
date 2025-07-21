@@ -87,16 +87,16 @@ public static class LegoBrickGenerator
         var colorDict = new Dictionary<Color, string>();
         Color color;
 
-        ColorUtility.TryParseHtmlString("#0072B2", out color);
+        ColorUtility.TryParseHtmlString("#008CFF", out color);
         colorDict.Add(color, "Blue");
 
-        ColorUtility.TryParseHtmlString("#D55E00", out color);
+        ColorUtility.TryParseHtmlString("#FFAA00", out color);
         colorDict.Add(color, "Orange");
         
-        ColorUtility.TryParseHtmlString("#CC79A7", out color);
+        ColorUtility.TryParseHtmlString("#E066B5", out color);
         colorDict.Add(color, "Pink");
         
-        ColorUtility.TryParseHtmlString("#009E73", out color);
+        ColorUtility.TryParseHtmlString("#00B77F", out color);
         colorDict.Add(color, "Green");
 
         return colorDict;
@@ -152,8 +152,8 @@ public static class LegoBrickGenerator
         var meshRenderer = body.AddComponent<MeshRenderer>();
         var material = new Material(Shader.Find("Universal Render Pipeline/Lit"));
         material.color = brickColor;
-        material.SetFloat("_Metallic", 0.0f); // Plastic is a non-metal
-        material.SetFloat("_Smoothness", 0.1f); // High smoothness for a shiny finish
+        material.SetFloat("_Metallic", 0.5f); // Plastic is a non-metal
+        material.SetFloat("_Smoothness", 0.05f); // High smoothness for a shiny finish
         meshRenderer.sharedMaterial = material;
 
         // Generate and combine meshes
