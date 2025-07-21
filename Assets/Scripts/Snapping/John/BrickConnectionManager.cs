@@ -13,7 +13,7 @@ public class BrickConnectionManager
     private List<BrickBehavior> m_ConnectedNeighbors = new List<BrickBehavior>();
 
     // Stores the joint connecting this brick to another.
-    private FixedJoint m_Joint; 
+    private ConfigurableJoint m_Joint; 
 
     // A reference to the single "master" brick that controls the entire group's Rigidbody.
     // If this brick is its own master, this will point to itself.
@@ -23,7 +23,7 @@ public class BrickConnectionManager
     public BrickBehavior m_OriginalMaster { get; set; }
 
     public List<BrickBehavior> ConnectedNeighbors => m_ConnectedNeighbors;
-    public FixedJoint Joint 
+    public ConfigurableJoint Joint 
     { 
         get => m_Joint; 
         set => m_Joint = value; 
@@ -208,12 +208,12 @@ public class BrickConnectionManager
             Object.DestroyImmediate(otherBrick.Joint);
             // The joint destruction will handle clearing the reference
         }
-        // If neither brick has the joint, search for any FixedJoint components
+        // If neither brick has the joint, search for any ConfigurableJoint components
         else
         {
-            brick.LogDebug($"UnsnapFrom() - No tracked joint found, searching for FixedJoint components");
+            brick.LogDebug($"UnsnapFrom() - No tracked joint found, searching for ConfigurableJoint components");
             
-            FixedJoint[] joints = brick.GetComponents<FixedJoint>();
+            ConfigurableJoint[] joints = brick.GetComponents<ConfigurableJoint>();
             foreach (var joint in joints)
             {
                 if (joint.connectedBody == otherBrick.GetComponent<Rigidbody>())
@@ -226,7 +226,7 @@ public class BrickConnectionManager
             }
             
             // Also check the other brick
-            FixedJoint[] otherJoints = otherBrick.GetComponents<FixedJoint>();
+            ConfigurableJoint[] otherJoints = otherBrick.GetComponents<ConfigurableJoint>();
             foreach (var joint in otherJoints)
             {
                 if (joint.connectedBody == brick.GetComponent<Rigidbody>())
@@ -325,7 +325,7 @@ public class BrickConnectionManager
             }
             
             // Strengthen any joints on this brick
-            FixedJoint[] joints = groupBrick.GetComponents<FixedJoint>();
+            ConfigurableJoint[] joints = groupBrick.GetComponents<ConfigurableJoint>();
             foreach (var joint in joints)
             {
                 joint.breakForce = float.PositiveInfinity;
@@ -357,16 +357,16 @@ public class BrickConnectionManager
         if (m_Joint != null)
         {
             brick.LogDebug($"Cleanup() - Destroying tracked joint");
-            Object.DestroyImmediate(m_Joint);
+            Object.Destroy(m_Joint);
             m_Joint = null;
         }
         
-        // Also check for any other FixedJoint components that might not be tracked
-        FixedJoint[] joints = brick.GetComponents<FixedJoint>();
+        // Also check for any other ConfigurableJoint components that might not be tracked
+        ConfigurableJoint[] joints = brick.GetComponents<ConfigurableJoint>();
         foreach (var joint in joints)
         {
             brick.LogDebug($"Cleanup() - Destroying untracked joint: {joint.name}");
-            Object.DestroyImmediate(joint);
+            Object.Destroy(joint);
         }
         
         // Clear references
@@ -375,7 +375,7 @@ public class BrickConnectionManager
         m_OriginalMaster = null;
     }
 
-    public void SetJoint(FixedJoint joint)
+    public void SetJoint(ConfigurableJoint joint)
     {
         brick.LogDebug($"SetJoint() - Setting joint: {joint}");
         m_Joint = joint;

@@ -10,7 +10,7 @@ public class BrickPhysicsManager
     // Missing properties that are referenced by other classes
     public BrickBehavior m_MasterBrick { get; set; }
     public BrickBehavior m_OriginalMaster { get; set; }
-    public FixedJoint m_Joint { get; set; }
+    public ConfigurableJoint m_Joint { get; set; }
 
     public BrickPhysicsManager(BrickBehavior brick)
     {
@@ -331,17 +331,18 @@ public class BrickPhysicsManager
             }
             
             // Strengthen any joints on this brick
-            FixedJoint[] joints = groupBrick.GetComponents<FixedJoint>();
+            ConfigurableJoint[] joints = groupBrick.GetComponents<ConfigurableJoint>();
             foreach (var joint in joints)
             {
-                joint.breakForce = float.PositiveInfinity;
-                joint.breakTorque = float.PositiveInfinity;
-                joint.enableCollision = false;
-                joint.enablePreprocessing = true;
-                joint.anchor = Vector3.zero;
-                joint.axis = Vector3.zero;
-                
-                brick.LogDebug($" StrengthenGroupConnections() - Strengthened joint on {groupBrick.name}");
+                JointDrive drive = new JointDrive();
+                drive.positionSpring = float.MaxValue;
+                drive.positionDamper = float.MaxValue;
+                drive.maximumForce = float.MaxValue;
+                joint.xDrive = drive;
+                joint.yDrive = drive;
+                joint.zDrive = drive;
+                joint.slerpDrive = drive;
+                brick.LogDebug($"StrengthenGroupConnections() - Strengthened joint on {groupBrick.name}");
             }
         }
         

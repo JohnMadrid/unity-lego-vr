@@ -110,13 +110,6 @@ public class Stud : MonoBehaviour
            else
                Debug.LogWarning($"Stud '{name}' missing required Collider component!");
        }
-       else if (!col.isTrigger)
-       {
-           if (ParentBrick != null)
-               ParentBrick.LogWarning($"Stud '{name}' collider should be set to 'Is Trigger'");
-           else
-               Debug.LogWarning($"Stud '{name}' collider should be set to 'Is Trigger'");
-       }
    }
 
    void Awake()

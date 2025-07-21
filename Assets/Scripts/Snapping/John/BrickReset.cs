@@ -151,6 +151,16 @@ public class BrickReset : MonoBehaviour
         var groupMembers = new System.Collections.Generic.List<BrickBehavior>();
         BrickGroupUtils.FindAllConnectedInGroup(_brickBehavior, groupMembers, name);
         
+        // NEW: If group has more than 2 bricks, do not reset
+        if (groupMembers.Count > 2)
+        {
+            if (_brickBehavior != null)
+                _brickBehavior.LogDebug($"[BrickReset] {gameObject.name}: Group has more than 2 bricks ({groupMembers.Count}), not resetting.", false);
+            else if (enableDebugLogging)
+                Debug.Log($"[BrickReset] {gameObject.name}: Group has more than 2 bricks ({groupMembers.Count}), not resetting.");
+            return;
+        }
+
         var resetTargets = new System.Collections.Generic.List<BrickReset>();
         foreach (var member in groupMembers)
         {
