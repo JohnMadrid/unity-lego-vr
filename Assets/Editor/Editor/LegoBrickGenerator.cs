@@ -68,9 +68,9 @@ public class LegoColorSelectorWindow : EditorWindow
 public static class LegoBrickGenerator
 {
     const float UNIT = 0.4f;
-    const float BRICK_HEIGHT = 0.8f * UNIT;
-    const float PLATE_HEIGHT = BRICK_HEIGHT / 3f;
-    const float STUD_HEIGHT = 0.2f * UNIT;
+    const float BRICK_HEIGHT = 1.05f * UNIT;
+    const float PLATE_HEIGHT = UNIT / 3.75f;
+    const float STUD_HEIGHT = 0.25f * UNIT;
     const float STUD_RADIUS = 0.225f * UNIT;
     const int Fidelity = 8;
     const int FACE_GRID_RESOLUTION = 4;

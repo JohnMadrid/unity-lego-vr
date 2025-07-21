@@ -308,6 +308,13 @@ public class BrickPhysicsManager
         
         foreach (var groupBrick in groupBricks)
         {
+            // Boards must be excluded from all physics modifications.
+            if (groupBrick.IsBoard)
+            {
+                brick.LogDebug($"StrengthenGroupConnections() - Skipping physics modification for board {groupBrick.name}.");
+                continue;
+            }
+
             // Strengthen the rigidbody properties
             if (groupBrick.GetComponent<Rigidbody>() != null)
             {

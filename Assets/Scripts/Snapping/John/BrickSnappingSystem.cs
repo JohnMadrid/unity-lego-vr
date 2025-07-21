@@ -7,6 +7,7 @@ public class BrickSnappingSystem
     private readonly BrickBehavior brick;
     private readonly BrickStudManager studManager;
     private BrickBehavior frozenBrick = null;
+    private BrickBehavior snapInitiator; // To track who started the multi-snap process
     
     // Missing variables that were in the original BrickBehavior
     private Vector3 targetSnapPosition;
@@ -40,7 +41,7 @@ public class BrickSnappingSystem
         {
             var snap = storedSnap.Value;
             brick.LogDebug($"ExecuteStoredSnap() - Executing stored snap from {snap.fromStud.name} to {snap.toStud.name}");
-            RequestSnap(snap.fromStud, snap.toStud, releasePosition, releaseRotation);
+            RequestSnap(snap.fromStud, snap.toStud, releasePosition, releaseRotation, null);
             storedSnap = null;
         }
     }
@@ -50,12 +51,17 @@ public class BrickSnappingSystem
     // Overload for calls without a specific release pose
     public void RequestSnap(Stud myStud, Stud targetStud)
     {
-        RequestSnap(myStud, targetStud, brick.transform.position, brick.transform.rotation);
+        RequestSnap(myStud, targetStud, brick.transform.position, brick.transform.rotation, null);
     }
 
     // This is the core method, called by a Stud when it collides with another valid stud.
-    public void RequestSnap(Stud myStud, Stud targetStud, Vector3 releasePosition, Quaternion releaseRotation)
+    public void RequestSnap(Stud myStud, Stud targetStud, Vector3 releasePosition, Quaternion releaseRotation, BrickBehavior initiator = null)
     {
+        // The initiator is the brick that manages the multi-snap queue.
+        // If null, this brick is initiating its own snap.
+        this.snapInitiator = initiator ?? brick;
+        brick.LogDebug($"RequestSnap() - Initiator is {this.snapInitiator.name}");
+
         brick.LogDebug($"RequestSnap() - Request from stud '{myStud.name}' to target stud '{targetStud.name}'");
         
         if (brick.GetComponent<BrickBehavior>().isSnapping)
@@ -559,67 +565,55 @@ public class BrickSnappingSystem
             return;
         }
 
-        // Determine the ultimate master of the target brick's group
-        // BUT if the target is a board, we don't want to join its group
-        BrickBehavior targetMaster = targetBrick.IsBoard ? brick : targetBrick.MasterBrick;
-
-        // --- BEGIN TWO-CONTROLLER FIX ---
-        Rigidbody jointTargetRigidbody = null;
-        if (!targetBrick.IsBoard)
+        // --- JOINT, MASTER, AND CONNECTION LOGIC ---
+        Rigidbody jointTargetRigidbody;
+        if (targetBrick.IsBoard)
         {
-            // Get all bricks in the target's group
-            List<BrickBehavior> groupBricks = new List<BrickBehavior>();
-            BrickGroupUtils.FindAllConnectedInGroup(targetBrick, groupBricks, targetBrick.name);
-            
-            // Check if any brick in the group is grabbed
-            BrickBehavior grabbedBrick = null;
-            foreach (var groupBrick in groupBricks)
-            {
-                if (groupBrick.IsGrabbed)
-                {
-                    grabbedBrick = groupBrick;
-                    break;
-                }
-            }
-
-            if (grabbedBrick != null && grabbedBrick.OriginalMaster != null)
-            {
-                // Connect to the ORIGINAL master's Rigidbody for maximum stability.
-                var originalMaster = grabbedBrick.OriginalMaster;
-                jointTargetRigidbody = originalMaster.GetComponent<Rigidbody>();
-                brick.LogDebug($"FinalizeSnap() - Two-controller scenario: Connecting joint to held group's ORIGINAL master brick: {originalMaster.name}");
-            }
-            else
-            {
-                // Default: connect to the target brick's Rigidbody (which is its own master at this point)
-                jointTargetRigidbody = targetBrick.GetComponent<Rigidbody>();
-                brick.LogDebug($"FinalizeSnap() - Normal scenario: Connecting joint to target brick: {targetBrick.name}");
-            }
-        }
-        // --- END TWO-CONTROLLER FIX ---
-
-        // Create a Fixed Joint to connect this brick to the target
-        // BUT don't create joints when snapping to boards
-        if (!targetBrick.IsBoard)
-        {
-            FixedJoint joint = brick.gameObject.AddComponent<FixedJoint>();
-            joint.connectedBody = jointTargetRigidbody;
-            joint.breakForce = float.PositiveInfinity;
-            joint.breakTorque = float.PositiveInfinity;
-            // Configure joint for better stability with dynamic objects
-            joint.enableCollision = false; // Prevent collision between connected objects
-            joint.enablePreprocessing = true; // Enable preprocessing for better stability
-            // IMPORTANT: Configure joint for maximum rigidity
-            joint.anchor = Vector3.zero; // Anchor at the center of the joint
-            joint.axis = Vector3.zero; // No specific axis constraint
-            // IMPORTANT: Store the joint in the connection manager for proper group tracking
-            brick.SetJoint(joint);
-            brick.LogDebug($" FinalizeSnap() - Stored joint in connection manager: {joint} connecting to {jointTargetRigidbody?.gameObject.name}");
+            // Snapping to a board: Connect directly to the board's Rigidbody.
+            // The brick's group master remains unchanged.
+            jointTargetRigidbody = targetBrick.GetComponent<Rigidbody>();
+            brick.LogDebug($"FinalizeSnap() - Board snap: Target Rigidbody is {targetBrick.name}. Brick master remains {brick.MasterBrick.name}.");
         }
         else
         {
-            brick.LogDebug($" FinalizeSnap() - Skipping joint creation for board {targetBrick.name}");
+            // Snapping to another brick/group:
+            BrickBehavior targetMaster = targetBrick.MasterBrick;
+
+            // Get all bricks in the target's group to check for two-controller grabs
+            List<BrickBehavior> groupBricks = new List<BrickBehavior>();
+            BrickGroupUtils.FindAllConnectedInGroup(targetBrick, groupBricks, targetBrick.name);
+            BrickBehavior grabbedBrickInTargetGroup = groupBricks.Find(b => b.IsGrabbed);
+
+            if (grabbedBrickInTargetGroup != null && grabbedBrickInTargetGroup.OriginalMaster != null)
+            {
+                // Two-controller scenario: Connect to the ORIGINAL master of the other held group for stability.
+                var originalMaster = grabbedBrickInTargetGroup.OriginalMaster;
+                jointTargetRigidbody = originalMaster.GetComponent<Rigidbody>();
+                brick.LogDebug($"FinalizeSnap() - Two-controller snap: Connecting joint to held group's ORIGINAL master: {originalMaster.name}");
+            }
+            else
+            {
+                // Normal brick-to-brick snap: Connect to the target brick's Rigidbody.
+                jointTargetRigidbody = targetBrick.GetComponent<Rigidbody>();
+                brick.LogDebug($"FinalizeSnap() - Normal snap: Connecting joint to target brick: {targetBrick.name}");
+            }
+
+            // Update this brick's group to join the target's group.
+            brick.UpdateMaster(targetMaster);
+            brick.LogDebug($"FinalizeSnap() - Brick joined target's group, new master: {targetMaster.name}");
         }
+
+        // A joint is now always created, including for boards.
+        FixedJoint joint = brick.gameObject.AddComponent<FixedJoint>();
+        joint.connectedBody = jointTargetRigidbody;
+        joint.breakForce = float.PositiveInfinity;
+        joint.breakTorque = float.PositiveInfinity;
+        joint.enableCollision = false;
+        joint.enablePreprocessing = true;
+        joint.anchor = Vector3.zero;
+        joint.axis = Vector3.zero;
+        brick.SetJoint(joint);
+        brick.LogDebug($" FinalizeSnap() - Created FixedJoint from {brick.name} to {jointTargetRigidbody.name}");
         
         // Set mass properties to make the connection more rigid
         // BUT only for non-board bricks and only if not currently grabbed
@@ -673,28 +667,10 @@ public class BrickSnappingSystem
             brick.LogDebug($" FinalizeSnap() - Skipping physics restoration for target board", true);
         }
 
-        // Update master and connection graph
-        if (targetBrick.IsBoard)
-        {
-            // When snapping to a board, the brick remains its own master
-            // and the board doesn't join the group
-            brick.UpdateMaster(brick);
-            brick.LogDebug($" FinalizeSnap() - Brick remains its own master when snapping to board");
-            
-            // Only add the board as a neighbor to the brick, not vice versa
-            brick.ConnectedNeighbors.Add(targetBrick);
-            brick.LogDebug($" FinalizeSnap() - Added board {targetBrick.name} as neighbor to brick {brick.name}");
-        }
-        else
-        {
-            // Normal brick-to-brick snapping - join the target's group
-        brick.UpdateMaster(targetMaster);
-            brick.LogDebug($" FinalizeSnap() - Brick joined target's group, new master: {targetMaster.name}");
-
-        // Update the logical connection graph
+        // The connection is now always symmetrical.
         brick.ConnectedNeighbors.Add(targetBrick);
         targetBrick.ConnectedNeighbors.Add(brick);
-        }
+        brick.LogDebug($" FinalizeSnap() - Created symmetrical connection between {brick.name} and {targetBrick.name}");
 
         // --- NEW: Un-freeze the brick after snap is complete ---
         if (frozenBrick != null)
@@ -736,8 +712,13 @@ public class BrickSnappingSystem
         brick.StartCoroutine(StabilizeGroupAfterSnap());
         
         // --- MULTI-SNAP CONTINUATION ---
-        brick.LogDebug($"FinalizeSnap() - Calling OnSnapFinalized_MultiSnap for multi-snap continuation", true);
-        brick.OnSnapFinalized_MultiSnap();
+        // The call must be made on the brick that initiated the multi-snap sequence,
+        // which may not be this brick.
+        brick.LogDebug($"FinalizeSnap() - Calling OnSnapFinalized_MultiSnap on initiator {snapInitiator.name} for multi-snap continuation", true);
+        snapInitiator.OnSnapFinalized_MultiSnap();
+        
+        // Clean up the initiator reference
+        snapInitiator = null;
         
         brick.LogDebug($" FinalizeSnap() - Snap finalization complete");
     }

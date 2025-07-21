@@ -602,7 +602,45 @@ public class BrickBehavior : MonoBehaviour
         if (ConnectedNeighbors.Count > 0)
         {
             LogDebug($"OnGrabStarted() - Brick is part of connected group with {ConnectedNeighbors.Count} neighbors");
-            // Find all bricks in the connected group
+            
+            // --- NEW: DETACH FROM BOARD ON GRAB ---
+            // Find all bricks in this group first.
+            List<BrickBehavior> groupBricks = new List<BrickBehavior>();
+            BrickGroupUtils.FindAllConnectedInGroup(this, groupBricks, name);
+            LogDebug($"OnGrabStarted() - Grabbed group has {groupBricks.Count} bricks (including boards).");
+
+            // Because joints are components of GameObjects, we need a direct way to destroy them.
+            // We'll define a helper using Object.Destroy for clean removal.
+            void Destroy(Object obj) => Object.Destroy(obj);
+
+            // Detach the entire group from any boards it's connected to.
+            // We iterate through all bricks in the identified group.
+            foreach (var brickInGroup in groupBricks)
+            {
+                // A brick can have multiple joints if it connects to multiple others.
+                var joints = brickInGroup.GetComponents<FixedJoint>();
+                foreach (var joint in joints)
+                {
+                    if (joint.connectedBody != null)
+                    {
+                        var connectedBehavior = joint.connectedBody.GetComponent<BrickBehavior>();
+                        if (connectedBehavior != null && connectedBehavior.IsBoard)
+                        {
+                            LogDebug($"OnGrabStarted() - Detaching {brickInGroup.name} from board {connectedBehavior.name}. Destroying joint.");
+                            
+                            // Remove logical connection from both sides
+                            brickInGroup.ConnectedNeighbors.Remove(connectedBehavior);
+                            connectedBehavior.ConnectedNeighbors.Remove(brickInGroup);
+                            
+                            // Destroy the physical joint component from the brick's GameObject.
+                            Destroy(joint);
+                        }
+                    }
+                }
+            }
+            // --- END DETACH FROM BOARD LOGIC ---
+            
+            // Find all bricks in the now potentially smaller group
             List<BrickBehavior> allGroupBricks = new List<BrickBehavior>();
             BrickGroupUtils.FindAllConnectedInGroup(this, allGroupBricks, name);
             // Find any other grabbed bricks in the group
@@ -773,13 +811,17 @@ public class BrickBehavior : MonoBehaviour
 
         foreach (var brickInGroup in currentGroup)
         {
+            // Don't check studs on boards, they are passive targets.
+            if (brickInGroup.IsBoard) continue;
+            
             foreach (var stud in brickInGroup.studManager.AllStuds)
             {
                 var target = stud.PotentialSnapTarget;
                 if (target != null && stud.ParentBrick != null && target.ParentBrick != null)
                 {
-                    // Only consider snaps between different bricks and different groups
-                    if (stud.ParentBrick != target.ParentBrick && !BrickBehavior.AreBricksInSameGroup(stud.ParentBrick, target.ParentBrick))
+                    // Only consider snaps between different bricks that are not already in the same group.
+                    // This is the crucial check to ensure we only process external connections.
+                    if (!BrickGroupUtils.AreBricksInSameGroup(stud.ParentBrick, target.ParentBrick))
                     {
                         var pair = (stud, target);
                         var reversePair = (target, stud);
@@ -792,12 +834,6 @@ public class BrickBehavior : MonoBehaviour
                 }
             }
         }
-
-        // Remove any pairs where either stud is already connected to the other's brick
-        newSnapPairs.RemoveAll(pair =>
-            pair.Item3.ConnectedNeighbors.Contains(pair.Item4) ||
-            pair.Item4.ConnectedNeighbors.Contains(pair.Item3)
-        );
 
         if (newSnapPairs.Count == 0)
         {
@@ -813,8 +849,12 @@ public class BrickBehavior : MonoBehaviour
         // Clear snap targets to avoid duplicate snaps
         snapStud.PotentialSnapTarget = null;
         snapTarget.PotentialSnapTarget = null;
-        // Remove this pair from the queue (not needed, as we rebuild each time)
-        snappingSystem.RequestSnap(snapStud, snapTarget, lastGrabPosition, lastGrabRotation);
+        
+        // --- BUG FIX ---
+        // The snap request MUST be initiated by the brick that owns the stud, not necessarily the brick that was grabbed.
+        // The 'fromBrick' is the owner of snapStud. Its snapping system will perform the calculation.
+        // We pass 'this' as the initiator so the callback returns to this brick, which manages the queue.
+        fromBrick.snappingSystem.RequestSnap(snapStud, snapTarget, lastGrabPosition, lastGrabRotation, this);
     }
 
     // In FinalizeSnap, after each snap, continue the multi-snap sequence if needed
@@ -822,6 +862,10 @@ public class BrickBehavior : MonoBehaviour
     {
         if (isMultiSnapInProgress)
         {
+            // With the improved AreBricksInSameGroup logic, we no longer need to manually
+            // halt the process. ExecuteNextMultiSnap will now correctly filter out
+            // internal connections on its own.
+            
             // --- FIX: Force group/neighbor update before next multi-snap ---
             ForceGroupAndNeighborUpdate();
 
@@ -836,18 +880,15 @@ public class BrickBehavior : MonoBehaviour
         // Find all bricks in the current group
         List<BrickBehavior> groupBricks = new List<BrickBehavior>();
         BrickGroupUtils.FindAllConnectedInGroup(this, groupBricks, name);
+        
+        // The master brick for the entire group should be the master of the brick that initiated the snap sequence.
+        // This ensures a consistent master after a merge.
+        BrickBehavior initiatorMaster = this.MasterBrick;
+
         foreach (var brick in groupBricks)
         {
-            // Force update master and neighbors
-            brick.UpdateMaster(this.MasterBrick);
-            // Clear potential snap targets for all studs
-            if (brick.studManager != null)
-            {
-                foreach (var stud in brick.studManager.AllStuds)
-                {
-                    stud.PotentialSnapTarget = null;
-                }
-            }
+            // Force update master for all bricks in the newly formed group.
+            brick.UpdateMaster(initiatorMaster);
         }
     }
 
@@ -893,7 +934,7 @@ public class BrickBehavior : MonoBehaviour
             studManager?.DisableStudCollisions();
             
             // Execute the actual snap
-            snappingSystem?.RequestSnap(potentialSnapStud, potentialSnapTargetStud);
+            snappingSystem?.RequestSnap(potentialSnapStud, potentialSnapTargetStud, releasePosition, releaseRotation, this);
             
             // Clear the stored snap
             potentialSnapStud = null;
