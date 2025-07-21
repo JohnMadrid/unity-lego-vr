@@ -155,7 +155,7 @@ public class BrickBehavior : MonoBehaviour
     public List<Stud> TopStuds => studManager?.TopStuds ?? new List<Stud>();
     public List<Stud> BottomStuds => studManager?.BottomStuds ?? new List<Stud>();
     public List<BrickBehavior> ConnectedNeighbors => connectionManager?.ConnectedNeighbors ?? new List<BrickBehavior>();
-    public FixedJoint Joint => connectionManager?.Joint;
+    public ConfigurableJoint Joint => connectionManager?.Joint;
     public BrickBehavior MasterBrick => connectionManager?.MasterBrick ?? this;
     public BrickBehavior OriginalMaster => connectionManager?.OriginalMaster ?? this;
     public BrickConnectionManager ConnectionManager => connectionManager;
@@ -618,7 +618,7 @@ public class BrickBehavior : MonoBehaviour
             foreach (var brickInGroup in groupBricks)
             {
                 // A brick can have multiple joints if it connects to multiple others.
-                var joints = brickInGroup.GetComponents<FixedJoint>();
+                var joints = brickInGroup.GetComponents<ConfigurableJoint>();
                 foreach (var joint in joints)
                 {
                     if (joint.connectedBody != null)
@@ -998,7 +998,7 @@ public class BrickBehavior : MonoBehaviour
         connectionManager?.RemoveNeighbor(neighbor);
     }
 
-    public void SetJoint(FixedJoint joint)
+    public void SetJoint(ConfigurableJoint joint)
     {
         connectionManager?.SetJoint(joint);
     }

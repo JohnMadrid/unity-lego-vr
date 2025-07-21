@@ -604,16 +604,24 @@ public class BrickSnappingSystem
         }
 
         // A joint is now always created, including for boards.
-        FixedJoint joint = brick.gameObject.AddComponent<FixedJoint>();
+        ConfigurableJoint joint = brick.gameObject.AddComponent<ConfigurableJoint>();
         joint.connectedBody = jointTargetRigidbody;
-        joint.breakForce = float.PositiveInfinity;
-        joint.breakTorque = float.PositiveInfinity;
-        joint.enableCollision = false;
-        joint.enablePreprocessing = true;
-        joint.anchor = Vector3.zero;
-        joint.axis = Vector3.zero;
+        joint.xMotion = ConfigurableJointMotion.Locked;
+        joint.yMotion = ConfigurableJointMotion.Locked;
+        joint.zMotion = ConfigurableJointMotion.Locked;
+        joint.angularXMotion = ConfigurableJointMotion.Locked;
+        joint.angularYMotion = ConfigurableJointMotion.Locked;
+        joint.angularZMotion = ConfigurableJointMotion.Locked;
+        JointDrive drive = new JointDrive();
+        drive.positionSpring = float.MaxValue; // Unlimited stiffness
+        drive.positionDamper = float.MaxValue; // Unlimited damping
+        drive.maximumForce = float.MaxValue;
+        joint.xDrive = drive;
+        joint.yDrive = drive;
+        joint.zDrive = drive;
+        joint.slerpDrive = drive;
         brick.SetJoint(joint);
-        brick.LogDebug($" FinalizeSnap() - Created FixedJoint from {brick.name} to {jointTargetRigidbody.name}");
+        brick.LogDebug($" FinalizeSnap() - Created ConfigurableJoint from {brick.name} to {jointTargetRigidbody.name}");
         
         // Set mass properties to make the connection more rigid
         // BUT only for non-board bricks and only if not currently grabbed
@@ -891,7 +899,7 @@ public class BrickSnappingSystem
         if (targetBrick.IsBoard)
         {
             // Check if there's a joint connecting to this board
-            FixedJoint joint = brick.GetComponent<FixedJoint>();
+            ConfigurableJoint joint = brick.GetComponent<ConfigurableJoint>();
             if (joint != null && joint.connectedBody != null && joint.connectedBody.gameObject == targetBrick.gameObject)
             {
                 brick.LogDebug($"IsAlreadyConnectedTo() - Found existing joint to board {targetBrick.name}");

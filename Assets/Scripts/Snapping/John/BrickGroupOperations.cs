@@ -10,7 +10,7 @@ public class BrickGroupOperations
     // Missing properties that are referenced by other classes
     public BrickBehavior m_MasterBrick { get; set; }
     public BrickBehavior m_OriginalMaster { get; set; }
-    public FixedJoint m_Joint { get; set; }
+    public ConfigurableJoint m_Joint { get; set; }
 
     public BrickGroupOperations(BrickBehavior brick)
     {
@@ -513,11 +513,11 @@ public class BrickGroupOperations
                     brickA.RemoveNeighbor(neighborOfA);
                     neighborOfA.RemoveNeighbor(brickA);
 
-                    // Find and destroy the physical FixedJoint, regardless of which brick it's on
+                    // Find and destroy the physical ConfigurableJoint, regardless of which brick it's on
                     bool jointDestroyed = false;
                     
                     // Check if joint is on brickA
-                    foreach (var joint in brickA.GetComponents<FixedJoint>())
+                    foreach (var joint in brickA.GetComponents<ConfigurableJoint>())
                     {
                         if (joint.connectedBody != null)
                         {
@@ -535,7 +535,7 @@ public class BrickGroupOperations
                     // If not found, check if joint is on neighborOfA
                     if (!jointDestroyed)
                     {
-                        foreach (var joint in neighborOfA.GetComponents<FixedJoint>())
+                        foreach (var joint in neighborOfA.GetComponents<ConfigurableJoint>())
                         {
                             if (joint.connectedBody != null)
                             {
@@ -564,8 +564,8 @@ public class BrickGroupOperations
         yield return new WaitForEndOfFrame();
         
         // Check if any joints still exist between these bricks
-        FixedJoint[] joints1 = brick1.GetComponents<FixedJoint>();
-        FixedJoint[] joints2 = brick2.GetComponents<FixedJoint>();
+        ConfigurableJoint[] joints1 = brick1.GetComponents<ConfigurableJoint>();
+        ConfigurableJoint[] joints2 = brick2.GetComponents<ConfigurableJoint>();
         
         bool jointStillExists = false;
         foreach (var joint in joints1)
