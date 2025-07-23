@@ -19,7 +19,7 @@ public class EyeTrackingManager : MonoBehaviour
 
         if (VarjoEyeTracking.RequestGazeCalibration())
         {
-            Debug.Log("Eye tracking calibrated.");
+            Debug.Log($"Eye tracking calibrated.");
         }
         else
         {
@@ -37,14 +37,33 @@ public class EyeTrackingManager : MonoBehaviour
         if (logging)
         {
             List<VarjoEyeTracking.GazeData> gazeDataList = new List<VarjoEyeTracking.GazeData>();
+        
             List<VarjoEyeTracking.EyeMeasurements> eyeMeasurementsList = new List<VarjoEyeTracking.EyeMeasurements>();
 
             int dataCount = VarjoEyeTracking.GetGazeList(out gazeDataList, out eyeMeasurementsList);
 
             if (dataCount > 0)
             {
+                // bool printedGazeFields = false;
                 foreach (var gazeData in gazeDataList)
                 {
+                    /*
+                    if (!printedGazeFields)
+                    {
+                        var type = gazeData.GetType();
+                        var fieldNames = new List<string>();
+                        foreach (var field in type.GetFields())
+                        {
+                            fieldNames.Add(field.Name);
+                        }
+                        foreach (var prop in type.GetProperties())
+                        {
+                            if (prop.CanRead)
+                                fieldNames.Add(prop.Name);
+                        }
+                        Debug.Log(string.Join(",", fieldNames));
+                        printedGazeFields = true;*/
+                    }
                     var eyeMeasurements = eyeMeasurementsList.Find(m => m.frameNumber == gazeData.frameNumber);
 
                     if (gazeData.status != VarjoEyeTracking.GazeStatus.Invalid)
