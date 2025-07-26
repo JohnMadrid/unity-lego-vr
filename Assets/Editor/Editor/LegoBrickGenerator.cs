@@ -3,6 +3,7 @@ using UnityEngine;
 using UnityEditor;
 using System.Collections.Generic;
 using System.Linq;
+using System.IO;
 
 /// <summary>
 /// A popup window to allow the user to select a color for the generated brick.
@@ -75,7 +76,10 @@ public static class LegoBrickGenerator
     const int Fidelity = 8;
     const int FACE_GRID_RESOLUTION = 4;
     private static readonly Vector3 BRICK_SCALE = new Vector3(0.11f, 0.11f, 0.11f);
-    
+    // Asset folder constants
+    private const string MeshFolder = "Assets/Bricks/Meshes";
+    private const string MaterialFolder = "Assets/Bricks/Materials";
+    private const string PrefabFolder = "Assets/Bricks/Prefabs";
     // Counter for unique names
     private static Dictionary<string, int> brickCounters = new Dictionary<string, int>();
 
@@ -126,40 +130,75 @@ public static class LegoBrickGenerator
     public static void CreateBrick(int width, int length, Color brickColor)
     {
         string colorName = GetColorName(brickColor);
-
         // --- Unique name logic ---
         string baseName = $"Lego_{width}x{length}_{colorName}";
-        if (!brickCounters.ContainsKey(baseName))
+        int uniqueIndex = 1;
+        string finalName = $"{baseName}_{uniqueIndex}";
+        while (GameObject.Find(finalName) != null)
         {
-            brickCounters[baseName] = 0;
+            uniqueIndex++;
+            finalName = $"{baseName}_{uniqueIndex}";
         }
-        brickCounters[baseName]++;
-        string finalName = $"{baseName}_{brickCounters[baseName]}";
-        
-        // 1) Parent container
         var brick = new GameObject(finalName);
         brick.transform.localScale = BRICK_SCALE;
         brick.transform.position = new Vector3(1f, 1f, 0f);
         brick.transform.rotation = Quaternion.Euler(90, 0, 0);
         brick.tag = "Brick";
         Undo.RegisterCreatedObjectUndo(brick, "Create Lego Brick");
- 
-        // 2) Create main body and studs as a single custom mesh
         var body = new GameObject("Body");
         body.transform.SetParent(brick.transform, false);
-        
-        // Apply custom material with random color
         var meshRenderer = body.AddComponent<MeshRenderer>();
+        var meshFilter = body.AddComponent<MeshFilter>();
+        EnsureFolder(MeshFolder);
+        EnsureFolder(MaterialFolder);
+        EnsureFolder(PrefabFolder);
+        // Mesh asset logic
+        string meshAssetPath = GetMeshAssetPath(width, length);
+        Mesh mesh = CreateBrickMesh(width, length);
+        Mesh meshAsset = null;
+        if (File.Exists(meshAssetPath))
+        {
+            meshAsset = AssetDatabase.LoadAssetAtPath<Mesh>(meshAssetPath);
+            if (!MeshesAreEqual(mesh, meshAsset))
+            {
+                RenameIfExists(meshAssetPath);
+                AssetDatabase.CreateAsset(mesh, meshAssetPath);
+                meshAsset = mesh;
+            }
+        }
+        else
+        {
+            AssetDatabase.CreateAsset(mesh, meshAssetPath);
+            meshAsset = mesh;
+        }
+        AssetDatabase.SaveAssets();
+        meshFilter.mesh = AssetDatabase.LoadAssetAtPath<Mesh>(meshAssetPath);
+        // Material asset logic
+        string matAssetPath = GetMaterialAssetPath(colorName);
+        Material matAsset = null;
         var material = new Material(Shader.Find("Universal Render Pipeline/Lit"));
         material.color = brickColor;
-        material.SetFloat("_Metallic", 0.5f); // Plastic is a non-metal
-        material.SetFloat("_Smoothness", 0.05f); // High smoothness for a shiny finish
-        meshRenderer.sharedMaterial = material;
-
-        // Generate and combine meshes
-        var meshFilter = body.AddComponent<MeshFilter>();
-        meshFilter.mesh = CreateBrickMesh(width, length);
-
+        material.SetFloat("_Metallic", 0.5f);
+        material.SetFloat("_Smoothness", 0.05f);
+        if (File.Exists(matAssetPath))
+        {
+            matAsset = AssetDatabase.LoadAssetAtPath<Material>(matAssetPath);
+            if (!MaterialsAreEqual(material, matAsset))
+            {
+                RenameIfExists(matAssetPath);
+                AssetDatabase.CreateAsset(material, matAssetPath);
+                matAsset = material;
+            }
+        }
+        else
+        {
+            AssetDatabase.CreateAsset(material, matAssetPath);
+            matAsset = material;
+        }
+        AssetDatabase.SaveAssets();
+        meshRenderer.sharedMaterial = AssetDatabase.LoadAssetAtPath<Material>(matAssetPath);
+ 
+        // 2) Create main body and studs as a single custom mesh
         // Position body so that the brick's transform is at the center of the mesh
         body.transform.localPosition = Vector3.zero;
  
@@ -269,6 +308,10 @@ public static class LegoBrickGenerator
  
         // 12) Select new brick
         Selection.activeGameObject = brick;
+        // Prefab logic
+        string prefabAssetPath = GetPrefabAssetPath(width, length, colorName);
+        PrefabUtility.SaveAsPrefabAssetAndConnect(brick, prefabAssetPath, InteractionMode.UserAction);
+        AssetDatabase.SaveAssets();
     }
     
     public static void CreateBoard(int width, int length)
@@ -708,6 +751,53 @@ public static class LegoBrickGenerator
         mesh.triangles = triangles.ToArray();
         mesh.RecalculateNormals();
         return mesh;
+    }
+
+    private static string GetMeshAssetPath(int width, int length)
+    {
+        return $"{MeshFolder}/brick_mesh_{width}x{length}.asset";
+    }
+    private static string GetMaterialAssetPath(string colorName)
+    {
+        return $"{MaterialFolder}/brick_mat_{colorName}.mat";
+    }
+    private static string GetPrefabAssetPath(int width, int length, string colorName)
+    {
+        return $"{PrefabFolder}/Lego_{width}x{length}_{colorName}.prefab";
+    }
+    private static void EnsureFolder(string folder)
+    {
+        if (!AssetDatabase.IsValidFolder(folder))
+        {
+            string parent = Path.GetDirectoryName(folder).Replace("\\", "/");
+            string name = Path.GetFileName(folder);
+            AssetDatabase.CreateFolder(parent, name);
+        }
+    }
+    private static void RenameIfExists(string assetPath)
+    {
+        if (File.Exists(assetPath))
+        {
+            string dir = Path.GetDirectoryName(assetPath).Replace("\\", "/");
+            string name = Path.GetFileNameWithoutExtension(assetPath);
+            string ext = Path.GetExtension(assetPath);
+            var creationTime = File.GetCreationTime(assetPath);
+            string timestamp = creationTime.ToString("yyyyMMdd_HHmmss");
+            string newName = $"{name}_old_{timestamp}{ext}";
+            string newPath = Path.Combine(dir, newName).Replace("\\", "/");
+            AssetDatabase.MoveAsset(assetPath, newPath);
+        }
+    }
+    private static bool MeshesAreEqual(Mesh a, Mesh b)
+    {
+        if (a == null || b == null) return false;
+        if (a.vertexCount != b.vertexCount) return false;
+        return a.vertices.SequenceEqual(b.vertices);
+    }
+    private static bool MaterialsAreEqual(Material a, Material b)
+    {
+        if (a == null || b == null) return false;
+        return a.color == b.color && a.shader == b.shader;
     }
 }
 
