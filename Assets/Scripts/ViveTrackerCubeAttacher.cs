@@ -2,6 +2,8 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.XR;
 
+// This script attaches images to Vive trackers for visualization in the scene.
+
 public class ViveTrackerCubeAttacher : MonoBehaviour
 {
     [Header("Assign the tracker cubes here")]

@@ -1,15 +1,17 @@
 using UnityEngine;
 
+/// <summary>
+/// Manages the color change of a plane when a specific foot cube enters or exits its trigger
 public class PlaneTriggerColor : MonoBehaviour
 {
     [Tooltip("Name of the foot cube this plane responds to")]
-    public string cubeName = "LeftFoot"; // Or "Cube_RightFoot"
+    public string cubeName = "LeftFoot"; // "RightFoot" for the right side
 
     public Color defaultColor = Color.grey;
     public Color triggeredColor = Color.green;
 
     private Renderer rend;
-    private int isTouching = 0; // allows for multi-trigger safety
+    private int isTouching = 0; // Tracks how many colliders are touching
 
     public static bool LeftFootOnPlane = false;
     public static bool RightFootOnPlane = false;
@@ -26,7 +28,6 @@ public class PlaneTriggerColor : MonoBehaviour
         {
             isTouching++;
             rend.material.color = triggeredColor;
-            // --- Set static flag ---
             SetFlag(true);
         }
     }
@@ -38,15 +39,13 @@ public class PlaneTriggerColor : MonoBehaviour
             isTouching--;
             if (isTouching <= 0)
             {
-                rend.material.color = defaultColor;
                 isTouching = 0;
-                // --- Clear static flag ---
+                rend.material.color = defaultColor;
                 SetFlag(false);
             }
         }
     }
 
-    // --- Helper to set appropriate flag ---
     private void SetFlag(bool value)
     {
         if (cubeName == "LeftFoot")

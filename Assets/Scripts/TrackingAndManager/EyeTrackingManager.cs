@@ -11,6 +11,7 @@ public class EyeTrackingManager : MonoBehaviour
     private string filePath;
 
     [SerializeField]
+    private Camera xrCamera; // Assign XR headset camera in inspector
     public bool trackingEnabled; // Can be toggled in inspector; default = false
 
     void Start()
@@ -62,12 +63,15 @@ public class EyeTrackingManager : MonoBehaviour
                                 fieldNames.Add(prop.Name);
                         }
                         Debug.Log(string.Join(",", fieldNames));
-                        printedGazeFields = true;*/
-                    }
+                        printedGazeFields = true;
+                    }*/
                     var eyeMeasurements = eyeMeasurementsList.Find(m => m.frameNumber == gazeData.frameNumber);
 
                     if (gazeData.status != VarjoEyeTracking.GazeStatus.Invalid)
                     {
+                        Vector3 hmdPosition = xrCamera.transform.position;
+                        Quaternion hmdRotation = xrCamera.transform.rotation;
+
                         string gazeEntry =
                             $"{gazeData.captureTime},{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()},{Time.time},{gazeData.focusDistance},{gazeData.frameNumber},{gazeData.focusStability},{gazeData.status}," +
                             $"{gazeData.gaze.forward.x},{gazeData.gaze.forward.y},{gazeData.gaze.forward.z}," +
@@ -78,10 +82,13 @@ public class EyeTrackingManager : MonoBehaviour
                             $"{gazeData.right.forward.x},{gazeData.right.forward.y},{gazeData.right.forward.z}," +
                             $"{gazeData.right.origin.x},{gazeData.right.origin.y},{gazeData.right.origin.z},{gazeData.rightStatus}," +
                             $"{eyeMeasurements.rightPupilDiameterInMM},{eyeMeasurements.rightIrisDiameterInMM},{eyeMeasurements.rightPupilIrisDiameterRatio},{eyeMeasurements.rightEyeOpenness}," +
-                            $"{eyeMeasurements.interPupillaryDistanceInMM}";
+                            $"{eyeMeasurements.interPupillaryDistanceInMM}," +
+                            $"{hmdPosition.x},{hmdPosition.y},{hmdPosition.z}," +
+                            $"{hmdRotation.x},{hmdRotation.y},{hmdRotation.z},{hmdRotation.w}";
 
                         writer.WriteLine(gazeEntry);
                         writer.Flush();
+
                     }
                 }
             }
@@ -99,15 +106,18 @@ public class EyeTrackingManager : MonoBehaviour
 
         writer = new StreamWriter(filePath);
         writer.WriteLine("raw_timestamp,relative_to_unix_epoch_timestamp,relative_to_video_first_frame_timestamp,focus_distance,frame_number,stability,status," +
-                         "gaze_forward_x,gaze_forward_y,gaze_forward_z," +
-                         "gaze_origin_x,gaze_origin_y,gaze_origin_z," +
-                         "left_forward_x,left_forward_y,left_forward_z," +
-                         "left_origin_x,left_origin_y,left_origin_z,left_status," +
-                         "left_pupil_diameter,left_iris_diameter,left_pupil_iris_ratio,left_eye_openness," +
-                         "right_forward_x,right_forward_y,right_forward_z," +
-                         "right_origin_x,right_origin_y,right_origin_z,right_status," +
-                         "right_pupil_diameter,right_iris_diameter,right_pupil_iris_ratio,right_eye_openness," +
-                         "inter_pupillary_distance");
+                        "gaze_forward_x,gaze_forward_y,gaze_forward_z," +
+                        "gaze_origin_x,gaze_origin_y,gaze_origin_z," +
+                        "left_forward_x,left_forward_y,left_forward_z," +
+                        "left_origin_x,left_origin_y,left_origin_z,left_status," +
+                        "left_pupil_diameter,left_iris_diameter,left_pupil_iris_ratio,left_eye_openness," +
+                        "right_forward_x,right_forward_y,right_forward_z," +
+                        "right_origin_x,right_origin_y,right_origin_z,right_status," +
+                        "right_pupil_diameter,right_iris_diameter,right_pupil_iris_ratio,right_eye_openness," +
+                        "inter_pupillary_distance," +
+                        "hmd_position_x,hmd_position_y,hmd_position_z," +
+                        "hmd_rotation_x,hmd_rotation_y,hmd_rotation_z,hmd_rotation_w");
+
 
         logging = true;
         Debug.Log($"Logging started: {filePath}");

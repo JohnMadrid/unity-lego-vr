@@ -40,9 +40,14 @@ public class StartValidator : MonoBehaviour
     public GameObject continuePanel;
     // 10.07.2025 end
 
+    //24.07.2025 NEW: Footprint planes
+    public GameObject LeftFootPlane;
+    public GameObject RightFootPlane;
+    //24.07.2025 END
+
     [Header("Timing Settings")]
     [Tooltip("Required gaze + button hold time (in seconds)")]
-    public float requiredHoldTime = 1f;
+    public float requiredHoldTime = 2f;
 
     private float timer = 0f;
     private bool validationComplete = false;
@@ -57,7 +62,9 @@ public class StartValidator : MonoBehaviour
     {
         if (validationComplete) return;
 
-        // Cast a ray from the player’s camera forward
+        // 23.07.2025 start
+
+        /* Cast a ray from the player’s camera forward
         Ray gazeRay = new Ray(playerCamera.position, playerCamera.forward);
         bool isLooking = false;
 
@@ -67,12 +74,37 @@ public class StartValidator : MonoBehaviour
             {
                 isLooking = true;
             }
+        }*/
+
+        bool isLooking = false;
+
+        if (GazeManager.Instance != null)
+        {
+            Vector3 gazeOrigin = GazeManager.Instance.gazeOrigin;
+            Vector3 gazeDirection = GazeManager.Instance.gazeDirection;
+            Ray gazeRay = new Ray(gazeOrigin, gazeDirection);
+
+            if (Physics.Raycast(gazeRay, out RaycastHit hitInfo, gazeRayMaxDistance))
+            {
+                if (hitInfo.collider == fixationCollider)
+                {
+                    isLooking = true;
+                }
+            }
+
         }
+        // 23.07.2025 end
 
         // Check button hold states
         bool leftHeld = leftButton.IsHeld;
         bool rightHeld = rightButton.IsHeld;
         bool isHolding = leftHeld && rightHeld;
+
+        // 24.07.2025 NEW: Foot placement flags
+        bool leftFootValid = PlaneTriggerColor.LeftFootOnPlane;
+        bool rightFootValid = PlaneTriggerColor.RightFootOnPlane;
+        bool feetCorrect = leftFootValid && rightFootValid;
+        // 24.07.2025 END
 
         // 🔎 Logging transitions only
         if (leftHeld && !prevLeftHeld) Debug.Log("Left button pressed.");
@@ -88,8 +120,8 @@ public class StartValidator : MonoBehaviour
         prevRightHeld = rightHeld;
         prevLooking = isLooking;
 
-        // If both conditions met, start accumulating time
-        if (isLooking && isHolding)
+        // Update 24.07.2025 All three conditions must be true
+        if (isLooking && isHolding && feetCorrect)
         {
             instructionMessage?.SetActive(false);
             timer += Time.deltaTime;
@@ -102,10 +134,11 @@ public class StartValidator : MonoBehaviour
         else
         {
             if (timer > 0f)
-                Debug.Log("Validation reset — lost gaze or button hold.");
+                Debug.Log("Validation reset — lost gaze, button hold, or foot placement.");
             timer = 0f;
             instructionMessage?.SetActive(true);
         }
+        //24.07.2025 END
     }
 
     void ConfirmStartPosition()
@@ -125,7 +158,11 @@ public class StartValidator : MonoBehaviour
         continuePanel.transform.Find("NextText").gameObject.SetActive(true);
         continuePanel.transform.Find("FinishText").gameObject.SetActive(false);
         // 10.07.2025
-        
+
+        // 24.07.2025 NEW: Disable footprint planes
+        LeftFootPlane.gameObject.SetActive(false);
+        RightFootPlane.gameObject.SetActive(false);
+        // 24.07.2025 END
         leftButton.SetColor(Color.green);
         rightButton.SetColor(Color.green);
 
@@ -152,6 +189,11 @@ public class StartValidator : MonoBehaviour
 
         leftButton.SetColor(leftButton.restingColor);
         rightButton.SetColor(rightButton.restingColor);
+
+        // 24.07.2025 NEW: Enable footprint planes
+        LeftFootPlane.gameObject.SetActive(true);
+        RightFootPlane.gameObject.SetActive(true);
+        // 24.07.2025 END
 
         prevLooking = false;
         prevLeftHeld = false;
