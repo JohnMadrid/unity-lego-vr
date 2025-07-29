@@ -47,25 +47,39 @@ public class IndexControllerLogger : MonoBehaviour
         InputDevices.GetDevicesAtXRNode(XRNode.RightHand, devices);
         if (devices.Count > 0) rightController = devices[0];
     }
-
+    // 29.07.2025 start
     void StartLogging()
     {
         string logPath = @"D:\LegoVR\unity-lego-vr\Other_than_in_project_files\CT_Data";
         Directory.CreateDirectory(logPath);
 
         DateTime now = DateTime.Now;
-        string fileName = $"controller_log_{now:yyyy-MM-dd-HH-mm}.csv";
-        filePath = Path.Combine(logPath, fileName);
 
-        writer = new StreamWriter(filePath);
-        writer.WriteLine("raw_timestamp,relative_to_unix_epoch_timestamp,hand,pos_x,pos_y,pos_z,rot_x,rot_y,rot_z,rot_w," +
-                         "vel_x,vel_y,vel_z,ang_vel_x,ang_vel_y,ang_vel_z," +
-                         "trigger_pressed,grip_pressed,primary_button_pressed," +
-                         "joystick_x,joystick_y,");
+        // Option 1: Append to a single file per day
+        string fileName = $"CT_Data_{now:yyyy-MM-dd}.csv";
+        
+        // Option 2: Uncomment this for a new file every session
+        // string fileName = $"CT_Data_{now:yyyy-MM-dd_HH-mm-ss}.csv";
+
+        filePath = Path.Combine(logPath, fileName);
+        bool fileExists = File.Exists(filePath);
+
+        writer = new StreamWriter(filePath, true); // true = append mode
+
+        if (!fileExists)
+        {
+            writer.WriteLine("raw_timestamp,relative_to_unix_epoch_timestamp,hand," +
+                            "pos_x,pos_y,pos_z,rot_x,rot_y,rot_z,rot_w," +
+                            "vel_x,vel_y,vel_z,ang_vel_x,ang_vel_y,ang_vel_z," +
+                            "trigger_pressed,grip_pressed,primary_button_pressed," +
+                            "joystick_x,joystick_y");
+        }
 
         logging = true;
         Debug.Log($"Controller logging started: {filePath}");
     }
+    // 29.07.2025 end
+
 
     void StopLogging()
     {

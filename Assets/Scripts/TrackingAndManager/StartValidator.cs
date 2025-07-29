@@ -50,7 +50,9 @@ public class StartValidator : MonoBehaviour
     public float requiredHoldTime = 2f;
 
     private float timer = 0f;
-    private bool validationComplete = false;
+
+    // 29.07.2025: changed variable to public to allow tracking managers to access it
+    public bool validationComplete = false;
 
     public bool IsValidated => validationComplete;
 

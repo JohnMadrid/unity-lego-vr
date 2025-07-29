@@ -101,7 +101,7 @@ public class EyeTrackingManager : MonoBehaviour
         Directory.CreateDirectory(logPath);
 
         DateTime now = DateTime.Now;
-        string fileName = $"{now:yyyy-MM-dd-HH-mm}.csv";
+        string fileName = $"ET_Data_{now:yyyy-MM-dd}.csv";
         filePath = Path.Combine(logPath, fileName);
 
         writer = new StreamWriter(filePath);

@@ -60,6 +60,14 @@ public class BrickSnappingSystem
         // The initiator is the brick that manages the multi-snap queue.
         // If null, this brick is initiating its own snap.
         this.snapInitiator = initiator ?? brick;
+        
+        // Validate that snapInitiator is not null
+        if (this.snapInitiator == null)
+        {
+            brick.LogWarning($"RequestSnap() - WARNING: snapInitiator is null after assignment!");
+            return;
+        }
+        
         brick.LogDebug($"RequestSnap() - Initiator is {this.snapInitiator.name}");
 
         brick.LogDebug($"RequestSnap() - Request from stud '{myStud.name}' to target stud '{targetStud.name}'");
@@ -722,8 +730,15 @@ public class BrickSnappingSystem
         // --- MULTI-SNAP CONTINUATION ---
         // The call must be made on the brick that initiated the multi-snap sequence,
         // which may not be this brick.
-        brick.LogDebug($"FinalizeSnap() - Calling OnSnapFinalized_MultiSnap on initiator {snapInitiator.name} for multi-snap continuation", true);
-        snapInitiator.OnSnapFinalized_MultiSnap();
+        if (snapInitiator != null)
+        {
+            brick.LogDebug($"FinalizeSnap() - Calling OnSnapFinalized_MultiSnap on initiator {snapInitiator.name} for multi-snap continuation", true);
+            snapInitiator.OnSnapFinalized_MultiSnap();
+        }
+        else
+        {
+            brick.LogWarning($"FinalizeSnap() - WARNING: snapInitiator is null, skipping multi-snap continuation");
+        }
         
         // Clean up the initiator reference
         snapInitiator = null;
