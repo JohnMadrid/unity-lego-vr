@@ -12,8 +12,21 @@ public class NextItemButton : MonoBehaviour
     public GameManager gameManager;
     public ScreenshotManager screenshotManager;
 
+    public bool pressed = false;
+
     public void OnPress()
     {
-        StartCoroutine(screenshotManager.CaptureScreenshotsAndContinue(gameManager));
+        pressed = true;
+        StartCoroutine(CaptureAndReset());
     }
+
+    private IEnumerator CaptureAndReset()
+    {
+        yield return StartCoroutine(screenshotManager.CaptureScreenshotsAndContinue(gameManager));
+
+        // Delay before resetting to allow EyeTrackingManager to detect it
+        yield return new WaitForEndOfFrame();
+        pressed = false;
+    }
+
 }
