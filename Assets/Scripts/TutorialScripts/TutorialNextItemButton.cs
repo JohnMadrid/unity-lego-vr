@@ -1,19 +1,33 @@
-using UnityEngine;
-using System.Collections;
+using UnityEngine; using System.Collections;
 
-/// <summary>
-/// Handles the next item button functionality in the game.
-/// Triggers the Screenshotmanager to make photos of the built model and which later callsLoadNextItem function in GameManager.
-/// Same script as ContinueButton but triggers a different function in GameManager.
-/// </summary>
-
-public class TutorialNextItemButton : MonoBehaviour
-{
+/// Handles the next item button functionality in the game. 
+/// Triggers the Screenshotmanager to make photos of the built model and which later calls LoadNextItem function in TutorialGameManager. 
+/// Same script as NextItemButton but for tutorial. ///
+public class TutorialNextItemButton : MonoBehaviour {
     public TutorialGameManager tutorialGameManager;
     public TutorialScreenshotManager tutorialScreenshotManager;
 
+    // 30.07.2025 begin
+    // Reference to EyeTrackingManager to mark model end
+    public EyeTrackingManager eyeTrackingManager;
+    public ViveTrackerManager viveTrackerManager;
+    public IndexControllerLogger indexControllerLogger;
+    // 30.07.2025 end
+
     public void OnPress()
     {
-        StartCoroutine(tutorialScreenshotManager.CaptureScreenshotsAndContinue(tutorialGameManager));
+        // 30.07.2025 begin
+        // Trigger logging of model build end
+        eyeTrackingManager?.RecordModelBuildEnd();
+        viveTrackerManager?.RecordModelBuildEnd();
+        indexControllerLogger?.RecordModelBuildEnd();
+        // 30.07.2025 end
+
+        StartCoroutine(CaptureAndReset());
+    }
+
+    private IEnumerator CaptureAndReset()
+    {
+        yield return StartCoroutine(tutorialScreenshotManager.CaptureScreenshotsAndContinue(tutorialGameManager));
     }
 }

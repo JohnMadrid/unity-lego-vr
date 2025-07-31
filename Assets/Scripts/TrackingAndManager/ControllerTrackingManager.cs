@@ -13,15 +13,35 @@ public class IndexControllerLogger : MonoBehaviour
     private string filePath;
     private bool logging = false;
     [SerializeField] public bool trackingEnabled; //Variable with field in inspector to enable tracking; default = false
+
+    // 30.07.2025 begin
+    private long modelStartTime = -1;
+    private long modelEndTime = -1;
+    private int modelNumber = 1;
+    private bool isBuildingModel = false;
+    private string modelName = "";
+    // 30.07.2025 end  
+
     
+    // 30.07.2025 begin
+    private string participantCode; // Default value, will be set in Start()
+    // 30.07.2025 end
+
     void Start()
     {
+        // 30.07.2025 begin
+        // Get the participant code from the TutorialGameManager
+        participantCode = GameObject.Find("TutorialGameManager")?.GetComponent<TutorialGameManager>()?.participantCode
+            ?? GameObject.Find("GameManager")?.GetComponent<GameManager>()?.participantCode
+            ?? "Unknown";
+        // 30.07.2025 end
         TryInitializeControllers();
-        
+
         // Check if tracking enabled (can be changed in inspector) and then start logging
+
         if (trackingEnabled)
         {
-            StartLogging(); 
+            StartLogging();
         }
     }
 
@@ -35,6 +55,19 @@ public class IndexControllerLogger : MonoBehaviour
             LogControllerData(leftController, XRNode.LeftHand, "Left");
             LogControllerData(rightController, XRNode.RightHand, "Right");
         }
+
+        // 30.07.2025 begin
+        // Update modelName every frame based on current item at modelSpawnPoint
+        Transform modelSpawnPoint = GameObject.Find("GameManager")?.GetComponent<GameManager>()?.modelSpawnPoint;
+        if (modelSpawnPoint != null && modelSpawnPoint.childCount > 0)
+        {
+            modelName = modelSpawnPoint.GetChild(0).gameObject.name.Replace("(Clone)", "").Trim();
+        }
+        else
+        {
+            modelName = "TM";
+        }
+        // 30.07.2025 end
     }
 
     void TryInitializeControllers()
@@ -55,24 +88,30 @@ public class IndexControllerLogger : MonoBehaviour
 
         DateTime now = DateTime.Now;
 
-        // Option 1: Append to a single file per day
-        string fileName = $"CT_Data_{now:yyyy-MM-dd}.csv";
-        
-        // Option 2: Uncomment this for a new file every session
-        // string fileName = $"CT_Data_{now:yyyy-MM-dd_HH-mm-ss}.csv";
+        // Construct the filename using the participant code
+        // 30.07.2025 begin add participant code to filename
+        string fileName = $"{participantCode}_CT_Data_{now:yyyy-MM-dd}.csv";
+        // 30.07.2025 end
 
         filePath = Path.Combine(logPath, fileName);
         bool fileExists = File.Exists(filePath);
 
-        writer = new StreamWriter(filePath, true); // true = append mode
-
+        // 30.07.2025 begin
+        // Open file in append mode
+        FileStream stream = new FileStream(filePath, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
+        writer = new StreamWriter(stream);
+        // 30.07.2025 end
+        
         if (!fileExists)
         {
             writer.WriteLine("raw_timestamp,relative_to_unix_epoch_timestamp,hand," +
                             "pos_x,pos_y,pos_z,rot_x,rot_y,rot_z,rot_w," +
                             "vel_x,vel_y,vel_z,ang_vel_x,ang_vel_y,ang_vel_z," +
                             "trigger_pressed,grip_pressed,primary_button_pressed," +
-                            "joystick_x,joystick_y");
+                            "joystick_x,joystick_y," +
+                            // 30.07.2025 begin
+                            "model_name,model_number,is_building_model,model_start_time,model_end_time");
+            // 30.07.2025 end
         }
 
         logging = true;
@@ -110,14 +149,17 @@ public class IndexControllerLogger : MonoBehaviour
         device.TryGetFeatureValue(CommonUsages.gripButton, out bool gripPressed);
         device.TryGetFeatureValue(CommonUsages.primaryButton, out bool primaryPressed);
         device.TryGetFeatureValue(CommonUsages.primary2DAxis, out Vector2 joystick);
-        
+
         long rawTimestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         float relativeTimestamp = Time.time;
-        
+
 
         string line = string.Format("{0},{1},{2},{3},{4:F4},{5:F4},{6:F4},{7:F4},{8:F4},{9:F4}," +
                                     "{10:F4},{11:F4},{12:F4},{13:F4},{14:F4},{15:F4}," +
-                                    "{16},{17},{18},{19:F4},{20:F4}",
+                                    "{16},{17},{18},{19:F4},{20:F4}," +
+                                    // 30.07.2025 begin
+                                    "{21},{22},{23},{24},{25}",
+            // 30.07.2025 end
             rawTimestamp, relativeTimestamp,
             hand,
             position.x, position.y, position.z,
@@ -125,7 +167,10 @@ public class IndexControllerLogger : MonoBehaviour
             velocity.x, velocity.y, velocity.z,
             angularVelocity.x, angularVelocity.y, angularVelocity.z,
             triggerPressed, gripPressed, primaryPressed,
-            joystick.x, joystick.y
+            joystick.x, joystick.y,
+            // 30.07.2025 begin
+            modelName, modelNumber, isBuildingModel, modelStartTime, modelEndTime
+        // 30.07.2025 end
         );
 
         writer.WriteLine(line);
@@ -141,4 +186,21 @@ public class IndexControllerLogger : MonoBehaviour
     {
         StopLogging();
     }
+    
+    // 30.07.2025 begin
+    public void RecordModelBuildStart()
+    {
+        modelStartTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        isBuildingModel = true;
+        Debug.Log($"Model {modelNumber} ('{modelName}') build started at {modelStartTime}");
+    }
+
+    public void RecordModelBuildEnd()
+    {
+        modelEndTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        isBuildingModel = false;
+        Debug.Log($"Model {modelNumber} ('{modelName}') build ended at {modelEndTime}");
+        modelNumber++;
+    }
+    // 30.07.2025 end
 }
