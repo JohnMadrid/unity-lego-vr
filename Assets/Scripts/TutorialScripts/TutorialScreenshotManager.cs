@@ -29,7 +29,7 @@ public class TutorialScreenshotManager : MonoBehaviour
 
         // Fetch metadata from GameManager
         string participantCode = tutorialGameManager.participantCode;
-        string conditionName = $"Trial{tutorialGameManager.trialNumber}";
+        string conditionName = $"Condition{tutorialGameManager.trialNumber}"; // 30.07.2025 begin changed Trial to condition
         int modelIndex = tutorialGameManager.GetCurrentItemIndex();
         string modelName = tutorialGameManager.modelPrefabs[modelIndex].name;
 

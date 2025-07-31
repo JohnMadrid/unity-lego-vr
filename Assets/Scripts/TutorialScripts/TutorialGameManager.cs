@@ -422,57 +422,58 @@ public class TutorialGameManager : MonoBehaviour
         {
             if (string.IsNullOrEmpty(csvPathQ1))
             {
-                DateTime now = DateTime.Now;
-                csvPathQ1 = Path.Combine(questionLogPath, $"{participantCode}_MentalLoadResponses_Trial{trialNumber}_{now:yyyy-MM-dd}.csv");
+                DateTime now = DateTime.Now; // 30.07.2025 begin changed Trial to condition
+                csvPathQ1 = Path.Combine(questionLogPath, $"{participantCode}_MentalLoadResponses_Condition{trialNumber}_{now:yyyy-MM-dd}.csv");
             }
 
             bool fileExists = File.Exists(csvPathQ1);
             using (var writer = new StreamWriter(csvPathQ1, append: true))
             {
-                if (!fileExists)
-                    writer.WriteLine("ParticipantCode,TrialNumber,ItemNumber,Response");
+                if (!fileExists) // 30.07.2025 begin changed Trial to condition
+                    writer.WriteLine("ParticipantCode,ConditionNumber,ItemNumber,Response");
 
                 writer.WriteLine($"{participantCode},{trialNumber},{currentItemIndex},{response}");
             }
-
-            Debug.Log($"Mental Load response saved: {participantCode}, Trial: {trialNumber}, Item: {currentItemIndex}, Response: {response}");
+            // 30.07.2025 begin changed Trial to condition  
+            Debug.Log($"Mental Load response saved: {participantCode}, Condition: {trialNumber}, Item: {currentItemIndex}, Response: {response}");
         }
         else if (questionPhase == 2)
         {
             if (string.IsNullOrEmpty(csvPathQ2))
             {
-                DateTime now = DateTime.Now;
-                csvPathQ2 = Path.Combine(questionLogPath, $"{participantCode}_SuccessResponses_Trial{trialNumber}_{now:yyyy-MM-dd}.csv");
+                DateTime now = DateTime.Now; // 30.07.2025 begin changed Trial to condition
+                csvPathQ2 = Path.Combine(questionLogPath, $"{participantCode}_SuccessResponses_Condition{trialNumber}_{now:yyyy-MM-dd}.csv");
             }
 
             bool fileExists = File.Exists(csvPathQ2);
             using (var writer = new StreamWriter(csvPathQ2, append: true))
             {
-                if (!fileExists)
-                    writer.WriteLine("ParticipantCode,TrialNumber,ItemNumber,Response");
+                if (!fileExists) // 30.07.2025 begin changed Trial to condition
+                    writer.WriteLine("ParticipantCode,ConditionNumber,ItemNumber,Response");
 
                 writer.WriteLine($"{participantCode},{trialNumber},{currentItemIndex},{response}");
             }
-
-            Debug.Log($"Success response saved: {participantCode}, Trial: {trialNumber}, Item: {currentItemIndex}, Response: {response}");
+            // 30.07.2025 begin changed Trial to condition
+            Debug.Log($"Success response saved: {participantCode}, Condition: {trialNumber}, Item: {currentItemIndex}, Response: {response}");
         } // 10.07.2025 begin
         else if (questionPhase == 3) // if the third question is to be answered
         {
             if (string.IsNullOrEmpty(csvPathQ3))
             {
-                DateTime now = DateTime.Now;
-                csvPathQ3 = Path.Combine(questionLogPath, $"{participantCode}_ComplexityResponses_Trial{trialNumber}_{now:yyyy-MM-dd}.csv");
+                DateTime now = DateTime.Now; // 30.07.2025 begin changed Trial to condition
+                csvPathQ3 = Path.Combine(questionLogPath, $"{participantCode}_ComplexityResponses_Condition{trialNumber}_{now:yyyy-MM-dd}.csv");
             }
 
             bool fileExists = File.Exists(csvPathQ3);
             using (var writer = new StreamWriter(csvPathQ3, append: true))
             {
-                if (!fileExists)
-                    writer.WriteLine("ParticipantCode,TrialNumber,ItemNumber,Response");
+                if (!fileExists) // 30.07.2025 begin changed Trial to condition
+                    writer.WriteLine("ParticipantCode,ConditionNumber,ItemNumber,Response");
 
                 writer.WriteLine($"{participantCode},{trialNumber},{currentItemIndex},{response}");
             }
-            Debug.Log($"Complexity response saved: {participantCode}, Trial: {trialNumber}, Item: {currentItemIndex}, Response: {response}");
+            // 30.07.2025 begin changed Trial to condition
+            Debug.Log($"Complexity response saved: {participantCode}, Condition: {trialNumber}, Item: {currentItemIndex}, Response: {response}");
 
         }  // 10.07.2025 end
     }

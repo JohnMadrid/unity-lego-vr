@@ -31,8 +31,19 @@ public class RandomModelManager : MonoBehaviour
 
     private int currentTrial = 0;
 
+    // 30.07.2025 begin
+    private string participantCode; // Default value, will be set in Start()
+    // 30.07.2025 end
+
     void Awake()
     {
+        // 30.07.2025 begin
+        // Get the participant code from the TutorialGameManager
+        participantCode = GameObject.Find("TutorialGameManager")?.GetComponent<TutorialGameManager>()?.participantCode
+            ?? GameObject.Find("GameManager")?.GetComponent<GameManager>()?.participantCode
+            ?? "Unknown";
+        // 30.07.2025 end
+
         if (Instance == null)
         {
             Instance = this;
@@ -100,7 +111,7 @@ public class RandomModelManager : MonoBehaviour
 		                GameObject resource = MatchResourceBrick(model.name);
 		                if (resource == null)
 		                {
-		                    Debug.LogError($"🚨 Missing resource for {model.name}");
+		                    Debug.LogError($" Missing resource for {model.name}");
 		                    continue;
 		                }
 		
@@ -159,7 +170,7 @@ public class RandomModelManager : MonoBehaviour
         gm.resourceBrickPrefabs = trialResources[currentTrial];
         gm.trialNumber = ParseTrialNumberFromScene();
 
-        LogTrialData(gm.modelPrefabs, gm.resourceBrickPrefabs, gm.trialNumber, gm.participantCode);
+        LogTrialData(gm.modelPrefabs, gm.resourceBrickPrefabs, gm.trialNumber, participantCode); // 30.07.2025 instead of gm.participantCode only participantCode
         currentTrial++;
     }
 

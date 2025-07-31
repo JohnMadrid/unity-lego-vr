@@ -7,28 +7,57 @@ using UnityEngine.XR;
 
 public class ViveTrackerManager : MonoBehaviour
 {
-   private StreamWriter writer;
-   private bool logging = false;
-   private string filePath;
-   [SerializeField] public bool trackingEnabled; //Variable with field in inspector to enable tracking; default = false
+    private StreamWriter writer;
+    private bool logging = false;
+    private string filePath;
+    [SerializeField] public bool trackingEnabled; //Variable with field in inspector to enable tracking; default = false
 
 
-   void Start()
-   {
-       Debug.Log("Initializing Body Tracking...");
+    // 30.07.2025 begin
+    private long modelStartTime = -1;
+    private long modelEndTime = -1;
+    private int modelNumber = 1;
+    private bool isBuildingModel = false;
+    private string modelName = "";
+    // 30.07.2025 end   
 
+    
+    // 30.07.2025 begin
+    private string participantCode; // Default value, will be set in Start()
+    // 30.07.2025 end 
+    void Start()
+    {
+        Debug.Log("Initializing Body Tracking...");
 
-       // Check if tracking enabled (can be changed in inspector) and then start logging
-       if (trackingEnabled)
-       {
-           StartLogging();
-       }
-   }
+        // Get the participant code from the TutorialGameManager
+        participantCode = GameObject.Find("TutorialGameManager")?.GetComponent<TutorialGameManager>()?.participantCode
+            ?? GameObject.Find("GameManager")?.GetComponent<GameManager>()?.participantCode
+            ?? "Unknown";
+
+        // Check if tracking enabled (can be changed in inspector) and then start logging
+        if (trackingEnabled)
+        {
+            StartLogging();
+        }
+    }
 
 
     void Update()
     {
         if (!logging) return;
+
+        // 30.07.2025 begin
+        // Update modelName every frame based on current item at modelSpawnPoint
+        Transform modelSpawnPoint = GameObject.Find("GameManager")?.GetComponent<GameManager>()?.modelSpawnPoint;
+        if (modelSpawnPoint != null && modelSpawnPoint.childCount > 0)
+        {
+            modelName = modelSpawnPoint.GetChild(0).gameObject.name.Replace("(Clone)", "").Trim();
+        }
+        else
+        {
+            modelName = "TM";
+        }
+        // 30.07.2025 end
 
         long rawTimestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         float relativeTimestamp = Time.time;
@@ -49,7 +78,10 @@ public class ViveTrackerManager : MonoBehaviour
             device.TryGetFeatureValue(CommonUsages.deviceRotation, out rotation);
 
             string key = device.name.Replace(",", "").Replace(" ", "_"); // Clean for CSV
-            string data = $"{position.x},{position.y},{position.z},{rotation.x},{rotation.y},{rotation.z},{rotation.w}";
+            string data = $"{position.x},{position.y},{position.z},{rotation.x},{rotation.y},{rotation.z},{rotation.w}," +
+                            // 30.07.2025 begin
+                            $"{modelName},{modelNumber},{isBuildingModel},{modelStartTime},{modelEndTime}";
+                            // 30.07.2025 end
             deviceData[key] = data;
         }
 
@@ -84,18 +116,20 @@ public class ViveTrackerManager : MonoBehaviour
         Directory.CreateDirectory(logPath);
 
         DateTime now = DateTime.Now;
-        
-        // OPTION 1: Append to one file per day
-        string fileName = $"BT_Data_{now:yyyy-MM-dd}.csv";
-        
-        // OPTION 2: Uncomment below for unique file per session
-        // string fileName = $"BT_Data_{now:yyyy-MM-dd_HH-mm-ss}.csv";
-        
+
+        // Construct the filename using the participant code
+        // 30.07.2025 begin add participant code to filename
+        string fileName = $"{participantCode}_BT_Data_{now:yyyy-MM-dd}.csv";
+        // 30.07.2025 end
+
         filePath = Path.Combine(logPath, fileName);
 
         bool fileExists = File.Exists(filePath);
-        writer = new StreamWriter(filePath, true); // 'true' enables appending
-
+        // 30.07.2025 begin
+        // Open file in append mode
+        FileStream stream = new FileStream(filePath, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
+        writer = new StreamWriter(stream);
+        // 30.07.2025 end
         if (!fileExists)
         {
             // Write header only if file is new
@@ -104,7 +138,10 @@ public class ViveTrackerManager : MonoBehaviour
                 "LeftFoot_pos_x,LeftFoot_pos_y,LeftFoot_pos_z,LeftFoot_rot_x,LeftFoot_rot_y,LeftFoot_rot_z,LeftFoot_rot_w," +
                 "Waist_pos_x,Waist_pos_y,Waist_pos_z,Waist_rot_x,Waist_rot_y,Waist_rot_z,Waist_rot_w," +
                 "LeftHand_pos_x,LeftHand_pos_y,LeftHand_pos_z,LeftHand_rot_x,LeftHand_rot_y,LeftHand_rot_z,LeftHand_rot_w," +
-                "RightHand_pos_x,RightHand_pos_y,RightHand_pos_z,RightHand_rot_x,RightHand_rot_y,RightHand_rot_z,RightHand_rot_w");
+                "RightHand_pos_x,RightHand_pos_y,RightHand_pos_z,RightHand_rot_x,RightHand_rot_y,RightHand_rot_z,RightHand_rot_w," +
+                // 30.07.2025 begin
+                "model_name,model_number,is_building_model,model_start_time,model_end_time");
+                // 30.07.2025 end
         }
 
         logging = true;
@@ -112,27 +149,44 @@ public class ViveTrackerManager : MonoBehaviour
     }
     // 29.07.2025 end
 
-   void StopLogging()
-   {
-       if (!logging) return;
+    void StopLogging()
+    {
+        if (!logging) return;
 
 
-       if (writer != null)
-       {
-           writer.Flush();
-           writer.Close();
-           writer = null;
-       }
+        if (writer != null)
+        {
+            writer.Flush();
+            writer.Close();
+            writer = null;
+        }
 
 
-       logging = false;
-       Debug.Log($"Body logging ended. Data saved at {filePath}");
-   }
+        logging = false;
+        Debug.Log($"Body logging ended. Data saved at {filePath}");
+    }
 
 
-   void OnApplicationQuit()
-   {
-       StopLogging();
-   }
+    void OnApplicationQuit()
+    {
+        StopLogging();
+    }
+   
+    // 30.07.2025 begin
+    public void RecordModelBuildStart()
+    {
+        modelStartTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        isBuildingModel = true;
+        Debug.Log($"Model {modelNumber} ('{modelName}') build started at {modelStartTime}");
+    }
+
+    public void RecordModelBuildEnd()
+    {
+        modelEndTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        isBuildingModel = false;
+        Debug.Log($"Model {modelNumber} ('{modelName}') build ended at {modelEndTime}");
+        modelNumber++;
+    }
+    // 30.07.2025 end
 }
 

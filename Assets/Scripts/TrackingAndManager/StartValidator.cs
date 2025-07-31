@@ -169,7 +169,30 @@ public class StartValidator : MonoBehaviour
         rightButton.SetColor(Color.green);
 
         Debug.Log("Start position validated — player may proceed.");
+
+
+        // 30.07.2025 begin
+
+        // Log start of model building through TrackingManagers on TrackingManager
+        EyeTrackingManager etTracker = GameObject.Find("TrackingManager")?.GetComponent<EyeTrackingManager>();
+        ViveTrackerManager btTracker = GameObject.Find("TrackingManager")?.GetComponent<ViveTrackerManager>();
+        IndexControllerLogger ctTracker = GameObject.Find("TrackingManager")?.GetComponent<IndexControllerLogger>();
+
+        if (etTracker != null)
+        {
+            etTracker.RecordModelBuildStart();
+        }
+        if (btTracker != null)
+        {
+            btTracker.RecordModelBuildStart();
+        }
+        if (ctTracker != null)
+        {
+            ctTracker.RecordModelBuildStart();
+        }
+        // 30.07.2025 end
     }
+    
 
     public void ResetValidator()
     {

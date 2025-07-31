@@ -29,7 +29,7 @@ public class ScreenshotManager : MonoBehaviour
 
         // Fetch metadata from GameManager
         string participantCode = gameManager.participantCode;
-        string conditionName = $"Trial{gameManager.trialNumber}";
+        string conditionName = $"Condition{gameManager.trialNumber}"; // 30.07.2025 changed Trial to Condition
         int modelIndex = gameManager.GetCurrentItemIndex();
         string modelName = gameManager.modelPrefabs[modelIndex].name;
 
