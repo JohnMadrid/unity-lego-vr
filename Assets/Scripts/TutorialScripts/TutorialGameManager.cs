@@ -96,6 +96,10 @@ public class TutorialGameManager : MonoBehaviour
 
     private void Start()
     {
+        // Get participant code from PlayerPrefs (same as GameManager)
+        participantCode = PlayerPrefs.GetString("ParticipantCode", "P001");
+        Debug.Log($"TutorialGameManager: Retrieved participant code from PlayerPrefs: '{participantCode}'");
+        
         StartCoroutine(ValidateAndLoadItem());
     }
 
@@ -314,7 +318,7 @@ public class TutorialGameManager : MonoBehaviour
             // 10.07.2025 end
 
 
-            // now only this button can be pressed trigegering the OnQuestionResponse(int response) function again but with questionPhase == 2
+            // now only this button can be pressed trigeguring the OnQuestionResponse(int response) function again but with questionPhase == 2
 
             // Increment the question phase to show the success question next time
             questionPhase = 2;
@@ -363,7 +367,7 @@ public class TutorialGameManager : MonoBehaviour
 
             // 10.07.2025 end
 
-            // now only this button can be pressed trigegering the OnQuestionResponse(int response) function again but with questionPhase == 3
+            // now only this button can be pressed trigeguring the OnQuestionResponse(int response) function again but with questionPhase == 3
 
             // 10.07.2025 begin
             // Increment the question phase to show the success question next time
@@ -532,6 +536,15 @@ public class TutorialGameManager : MonoBehaviour
     {
         Debug.Log($"Break time! Waiting for {breakDuration} seconds.");
         yield return new WaitForSeconds(breakDuration);
+
+        // Debug: Log the participant code before scene transition
+        Debug.Log($"TutorialGameManager: Scene transition - Current participant code: '{participantCode}'");
+        Debug.Log($"TutorialGameManager: Scene transition - PlayerPrefs participant code: '{PlayerPrefs.GetString("ParticipantCode", "NOT_FOUND")}'");
+        
+        // Ensure participant code is saved to PlayerPrefs before scene transition
+        PlayerPrefs.SetString("ParticipantCode", participantCode);
+        PlayerPrefs.Save();
+        Debug.Log($"TutorialGameManager: Scene transition - Saved participant code to PlayerPrefs: '{participantCode}'");
 
         int currentSceneIndex = SceneManager.GetActiveScene().buildIndex;
 

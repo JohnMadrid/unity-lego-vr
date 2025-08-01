@@ -17,10 +17,9 @@ public class IndexControllerLogger : MonoBehaviour
     // 30.07.2025 begin
     private long modelStartTime = -1;
     private long modelEndTime = -1;
-    private int modelNumber = 1;
     private bool isBuildingModel = false;
     private string modelName = "";
-    // 30.07.2025 end  
+    // 30.07.2025 end
 
     
     // 30.07.2025 begin
@@ -29,17 +28,18 @@ public class IndexControllerLogger : MonoBehaviour
 
     void Start()
     {
-        // 30.07.2025 begin
-        // Get the participant code from the TutorialGameManager
-        participantCode = GameObject.Find("TutorialGameManager")?.GetComponent<TutorialGameManager>()?.participantCode
-            ?? GameObject.Find("GameManager")?.GetComponent<GameManager>()?.participantCode
-            ?? "Unknown";
-        // 30.07.2025 end
         TryInitializeControllers();
 
-        // Check if tracking enabled (can be changed in inspector) and then start logging
+        // Don't start logging immediately - wait for participant code to be set
+        // StartLogging() will be called manually when participant code is ready
+    }
 
-        if (trackingEnabled)
+    /// <summary>
+    /// Public method to manually start logging. Can be called from other scripts.
+    /// </summary>
+    public void StartLoggingManually()
+    {
+        if (!logging && trackingEnabled)
         {
             StartLogging();
         }
@@ -58,15 +58,39 @@ public class IndexControllerLogger : MonoBehaviour
 
         // 30.07.2025 begin
         // Update modelName every frame based on current item at modelSpawnPoint
-        Transform modelSpawnPoint = GameObject.Find("GameManager")?.GetComponent<GameManager>()?.modelSpawnPoint;
+        Transform modelSpawnPoint = null;
+        
+        // Try to get modelSpawnPoint from TutorialGameManager first (for tutorial phase)
+        var tutorialGM = GameObject.Find("TutorialGameManager")?.GetComponent<TutorialGameManager>();
+        if (tutorialGM != null && tutorialGM.modelSpawnPoint != null)
+        {
+            modelSpawnPoint = tutorialGM.modelSpawnPoint;
+        }
+        // If not found in TutorialGameManager, try GameManager (for main experiment phase)
+        else
+        {
+            var gameGM = GameObject.Find("GameManager")?.GetComponent<GameManager>();
+            if (gameGM != null)
+            {
+                modelSpawnPoint = gameGM.modelSpawnPoint;
+            }
+        }
+        
         if (modelSpawnPoint != null && modelSpawnPoint.childCount > 0)
         {
             modelName = modelSpawnPoint.GetChild(0).gameObject.name.Replace("(Clone)", "").Trim();
         }
         else
         {
-            modelName = "TM";
+            modelName = "None";
         }
+        
+        // Update modelNumber: set to -1 only when no model is available AND not building
+        // if (modelName == "None" && !isBuildingModel)
+        // {
+        //     modelNumber = -1;
+        // }
+        // Note: modelNumber is incremented in RecordModelBuildEnd() method
         // 30.07.2025 end
     }
 
@@ -87,6 +111,28 @@ public class IndexControllerLogger : MonoBehaviour
         Directory.CreateDirectory(logPath);
 
         DateTime now = DateTime.Now;
+
+        // Get the participant code from the TutorialGameManager or GameManager
+        var tutorialGM = GameObject.Find("TutorialGameManager")?.GetComponent<TutorialGameManager>();
+        var gameGM = GameObject.Find("GameManager")?.GetComponent<GameManager>();
+        
+        if (tutorialGM != null)
+        {
+            participantCode = tutorialGM.participantCode;
+            Debug.Log($"ControllerTrackingManager: Retrieved participant code from TutorialGameManager: '{participantCode}'");
+        }
+        else if (gameGM != null)
+        {
+            participantCode = gameGM.participantCode;
+            Debug.Log($"ControllerTrackingManager: Retrieved participant code from GameManager: '{participantCode}'");
+        }
+        else
+        {
+            participantCode = "Unknown";
+            Debug.Log($"ControllerTrackingManager: No GameManager found, using default: '{participantCode}'");
+        }
+        
+        Debug.Log($"ControllerTrackingManager: Final participant code: '{participantCode}'");
 
         // Construct the filename using the participant code
         // 30.07.2025 begin add participant code to filename
@@ -110,7 +156,7 @@ public class IndexControllerLogger : MonoBehaviour
                             "trigger_pressed,grip_pressed,primary_button_pressed," +
                             "joystick_x,joystick_y," +
                             // 30.07.2025 begin
-                            "model_name,model_number,is_building_model,model_start_time,model_end_time");
+                            "model_name,is_building_model,model_start_time,model_end_time");
             // 30.07.2025 end
         }
 
@@ -158,7 +204,7 @@ public class IndexControllerLogger : MonoBehaviour
                                     "{10:F4},{11:F4},{12:F4},{13:F4},{14:F4},{15:F4}," +
                                     "{16},{17},{18},{19:F4},{20:F4}," +
                                     // 30.07.2025 begin
-                                    "{21},{22},{23},{24},{25}",
+                                    "{21},{22},{23},{24}",
             // 30.07.2025 end
             rawTimestamp, relativeTimestamp,
             hand,
@@ -169,7 +215,7 @@ public class IndexControllerLogger : MonoBehaviour
             triggerPressed, gripPressed, primaryPressed,
             joystick.x, joystick.y,
             // 30.07.2025 begin
-            modelName, modelNumber, isBuildingModel, modelStartTime, modelEndTime
+            modelName, isBuildingModel, modelStartTime, modelEndTime
         // 30.07.2025 end
         );
 
@@ -190,17 +236,20 @@ public class IndexControllerLogger : MonoBehaviour
     // 30.07.2025 begin
     public void RecordModelBuildStart()
     {
-        modelStartTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         isBuildingModel = true;
-        Debug.Log($"Model {modelNumber} ('{modelName}') build started at {modelStartTime}");
+        // Ensure model number is not -1 when building starts
+        // if (modelNumber == -1)
+        // {
+        //     modelNumber = 1; // Start with model 1 if it was -1
+        // }
+        Debug.Log($"Model '{modelName}' build started at {DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}");
     }
 
     public void RecordModelBuildEnd()
     {
-        modelEndTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         isBuildingModel = false;
-        Debug.Log($"Model {modelNumber} ('{modelName}') build ended at {modelEndTime}");
-        modelNumber++;
+        Debug.Log($"Model '{modelName}' build ended at {DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}");
+        // modelNumber++; // This line is removed
     }
     // 30.07.2025 end
 }

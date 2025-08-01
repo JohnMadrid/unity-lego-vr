@@ -101,9 +101,43 @@ public class GameManager : MonoBehaviour
         // 16.07.2025 end
         // 30.07.2025 begin
         // Initialize participant code from PlayerPrefs or set a default value
+        string playerPrefsValue = PlayerPrefs.GetString("ParticipantCode", "NOT_FOUND");
+        Debug.Log($"GameManager: PlayerPrefs value for ParticipantCode: '{playerPrefsValue}'");
+        
         participantCode = PlayerPrefs.GetString("ParticipantCode", "P001");
+        Debug.Log($"GameManager: Retrieved participant code from PlayerPrefs: '{participantCode}'");
+        
+        // Start tracking managers with the correct participant code
+        StartTrackingManagers();
         // 30.07.2025 end
         StartCoroutine(ValidateAndLoadItem());
+    }
+
+    /// <summary>
+    /// Starts all tracking managers with the correct participant code.
+    /// </summary>
+    private void StartTrackingManagers()
+    {
+        Debug.Log($"GameManager: Starting tracking managers with participant code: '{participantCode}'");
+        
+        // Find and start all tracking managers
+        var eyeTrackingManager = FindObjectOfType<EyeTrackingManager>();
+        if (eyeTrackingManager != null && eyeTrackingManager.trackingEnabled)
+        {
+            eyeTrackingManager.StartLoggingManually();
+        }
+        
+        var viveTrackerManager = FindObjectOfType<ViveTrackerManager>();
+        if (viveTrackerManager != null && viveTrackerManager.trackingEnabled)
+        {
+            viveTrackerManager.StartLoggingManually();
+        }
+        
+        var controllerTrackingManager = FindObjectOfType<IndexControllerLogger>();
+        if (controllerTrackingManager != null && controllerTrackingManager.trackingEnabled)
+        {
+            controllerTrackingManager.StartLoggingManually();
+        }
     }
 
     // function is triggered by the NextItembutton in the scene. it is initially enabled
@@ -406,7 +440,7 @@ public class GameManager : MonoBehaviour
             // 10.07.2025 end
 
 
-            // now only this button can be pressed trigegering the OnQuestionResponse(int response) function again but with questionPhase == 2
+            // now only this button can be pressed trigeguring the OnQuestionResponse(int response) function again but with questionPhase == 2
 
             // Increment the question phase to show the success question next time
             questionPhase = 2;
@@ -455,7 +489,7 @@ public class GameManager : MonoBehaviour
 
             // 10.07.2025 end
 
-            // now only this button can be pressed trigegering the OnQuestionResponse(int response) function again but with questionPhase == 3
+            // now only this button can be pressed trigeguring the OnQuestionResponse(int response) function again but with questionPhase == 3
 
             // 10.07.2025 begin
             // Increment the question phase to show the success question next time
