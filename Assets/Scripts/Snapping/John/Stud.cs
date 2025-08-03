@@ -164,10 +164,10 @@ public class Stud : MonoBehaviour
                ParentBrick.LogDebug($"Start() - Position: {transform.position}");
            }
        }
-       else
-       {
-           Debug.LogWarning($"Stud '{name}' has no ParentBrick assigned in Start() - this should not happen!");
-       }
+       //else
+       // {
+       //     Debug.LogWarning($"Stud '{name}' has no ParentBrick assigned in Start() - this should not happen!");
+       // }
    }
 
 

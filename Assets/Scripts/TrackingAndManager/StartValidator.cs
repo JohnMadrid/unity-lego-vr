@@ -50,6 +50,8 @@ public class StartValidator : MonoBehaviour
     public float requiredHoldTime = 2f;
 
     private float timer = 0f;
+    private float debugLogTimer = 0f;
+    private const float DEBUG_LOG_INTERVAL = 0.25f;
 
     // 29.07.2025: changed variable to public to allow tracking managers to access it
     public bool validationComplete = false;
@@ -128,7 +130,13 @@ public class StartValidator : MonoBehaviour
             instructionMessage?.SetActive(false);
             timer += Time.deltaTime;
 
-            Debug.Log($"Validating... held for {timer:F2} / {requiredHoldTime} seconds.");
+            // Log debug message only every 0.25 seconds
+            debugLogTimer += Time.deltaTime;
+            if (debugLogTimer >= DEBUG_LOG_INTERVAL)
+            {
+                Debug.Log($"Validating... held for {timer:F2} / {requiredHoldTime} seconds.");
+                debugLogTimer = 0f;
+            }
 
             if (timer >= requiredHoldTime)
                 ConfirmStartPosition();
@@ -169,28 +177,6 @@ public class StartValidator : MonoBehaviour
         rightButton.SetColor(Color.green);
 
         Debug.Log("Start position validated — player may proceed.");
-
-
-        // 30.07.2025 begin
-
-        // Log start of model building through TrackingManagers on TrackingManager
-        EyeTrackingManager etTracker = GameObject.Find("TrackingManager")?.GetComponent<EyeTrackingManager>();
-        ViveTrackerManager btTracker = GameObject.Find("TrackingManager")?.GetComponent<ViveTrackerManager>();
-        IndexControllerLogger ctTracker = GameObject.Find("TrackingManager")?.GetComponent<IndexControllerLogger>();
-
-        if (etTracker != null)
-        {
-            etTracker.RecordModelBuildStart();
-        }
-        if (btTracker != null)
-        {
-            btTracker.RecordModelBuildStart();
-        }
-        if (ctTracker != null)
-        {
-            ctTracker.RecordModelBuildStart();
-        }
-        // 30.07.2025 end
     }
     
 
@@ -198,6 +184,7 @@ public class StartValidator : MonoBehaviour
     {
         validationComplete = false;
         timer = 0f;
+        debugLogTimer = 0f;
 
         fixationCross?.SetActive(true);
         instructionMessage?.SetActive(true);

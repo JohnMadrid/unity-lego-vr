@@ -13,23 +13,52 @@ public class NextItemButton : MonoBehaviour
     // Reference to TrackingManagers to mark model end
     public EyeTrackingManager eyeTrackingManager;
     public ViveTrackerManager viveTrackerManager;
-    public IndexControllerLogger indexControllerLogger;
     // 30.07.2025 end
 
     public void OnPress()
     {
+        Debug.Log("NextItemButton: OnPress() called.");
+
         // 30.07.2025 begin
         // Trigger logging of model build end
-        eyeTrackingManager?.RecordModelBuildEnd();
-        viveTrackerManager?.RecordModelBuildEnd();
-        indexControllerLogger?.RecordModelBuildEnd();
+        if (eyeTrackingManager != null)
+        {
+            Debug.Log("NextItemButton: Calling eyeTrackingManager.RecordModelBuildEnd().");
+            eyeTrackingManager.RecordModelBuildEnd();
+        }
+        else
+        {
+            Debug.LogWarning("NextItemButton: eyeTrackingManager is not assigned.");
+        }
+
+        if (viveTrackerManager != null)
+        {
+            Debug.Log("NextItemButton: Calling viveTrackerManager.RecordModelBuildEnd().");
+            viveTrackerManager.RecordModelBuildEnd();
+        }
+        else
+        {
+            Debug.LogWarning("NextItemButton: viveTrackerManager is not assigned.");
+        }
         // 30.07.2025 end
 
+        Debug.Log("NextItemButton: Starting CaptureAndReset coroutine.");
         StartCoroutine(CaptureAndReset());
     }
 
     private IEnumerator CaptureAndReset()
     {
-        yield return StartCoroutine(screenshotManager.CaptureScreenshotsAndContinue(gameManager));
+        Debug.Log("NextItemButton: CaptureAndReset coroutine started.");
+        if (screenshotManager != null)
+        {
+            Debug.Log("NextItemButton: Starting screenshotManager.CaptureScreenshotsAndContinue coroutine.");
+            yield return StartCoroutine(screenshotManager.CaptureScreenshotsAndContinue(gameManager));
+            Debug.Log("NextItemButton: screenshotManager.CaptureScreenshotsAndContinue coroutine finished.");
+        }
+        else
+        {
+            Debug.LogError("NextItemButton: screenshotManager is not assigned. Cannot proceed.");
+        }
+        Debug.Log("NextItemButton: CaptureAndReset coroutine finished.");
     }
 }
