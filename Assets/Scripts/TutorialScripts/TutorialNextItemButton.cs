@@ -11,7 +11,6 @@ public class TutorialNextItemButton : MonoBehaviour {
     // Reference to EyeTrackingManager to mark model end
     public EyeTrackingManager eyeTrackingManager;
     public ViveTrackerManager viveTrackerManager;
-    public IndexControllerLogger indexControllerLogger;
     // 30.07.2025 end
 
     public void OnPress()
@@ -20,7 +19,6 @@ public class TutorialNextItemButton : MonoBehaviour {
         // Trigger logging of model build end
         eyeTrackingManager?.RecordModelBuildEnd();
         viveTrackerManager?.RecordModelBuildEnd();
-        indexControllerLogger?.RecordModelBuildEnd();
         // 30.07.2025 end
 
         StartCoroutine(CaptureAndReset());

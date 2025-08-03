@@ -27,6 +27,7 @@ public class PlaneTriggerColor : MonoBehaviour
         if (other.gameObject.name == cubeName)
         {
             isTouching++;
+            Debug.Log($"OnTriggerEnter: {other.gameObject.name} entered. isTouching = {isTouching}");
             rend.material.color = triggeredColor;
             SetFlag(true);
         }
@@ -37,9 +38,11 @@ public class PlaneTriggerColor : MonoBehaviour
         if (other.gameObject.name == cubeName)
         {
             isTouching--;
+            Debug.Log($"OnTriggerExit: {other.gameObject.name} exited. isTouching = {isTouching}");
             if (isTouching <= 0)
             {
                 isTouching = 0;
+                Debug.Log($"OnTriggerExit: Resetting color to grey. isTouching = {isTouching}");
                 rend.material.color = defaultColor;
                 SetFlag(false);
             }
@@ -52,5 +55,16 @@ public class PlaneTriggerColor : MonoBehaviour
             LeftFootOnPlane = value;
         else if (cubeName == "RightFoot")
             RightFootOnPlane = value;
+    }
+
+    void OnDisable()
+    {
+        isTouching = 0;
+        if (rend != null)
+        {
+            rend.material.color = defaultColor;
+        }
+        SetFlag(false);
+        Debug.Log($"{cubeName} plane disabled. Resetting state. isTouching = {isTouching}");
     }
 }

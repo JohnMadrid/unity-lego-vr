@@ -59,10 +59,6 @@ public class ParticipantInputManager : MonoBehaviour
             viveTrackerManager.StartLoggingManually();
         }
         
-        var controllerTrackingManager = FindObjectOfType<IndexControllerLogger>();
-        if (controllerTrackingManager != null && controllerTrackingManager.trackingEnabled)
-        {
-            controllerTrackingManager.StartLoggingManually();
-        }
+
     }
 }

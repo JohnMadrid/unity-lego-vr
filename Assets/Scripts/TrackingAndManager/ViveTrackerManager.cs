@@ -93,10 +93,7 @@ public class ViveTrackerManager : MonoBehaviour
             device.TryGetFeatureValue(CommonUsages.deviceRotation, out rotation);
 
             string key = device.name.Replace(",", "").Replace(" ", "_"); // Clean for CSV
-            string data = $"{position.x},{position.y},{position.z},{rotation.x},{rotation.y},{rotation.z},{rotation.w}," +
-                            // 30.07.2025 begin
-                            $"{modelName}";
-                            // 30.07.2025 end
+            string data = $"{position.x},{position.y},{position.z},{rotation.x},{rotation.y},{rotation.z},{rotation.w}";
             deviceData[key] = data;
         }
 
@@ -119,6 +116,9 @@ public class ViveTrackerManager : MonoBehaviour
             else
                 row += ",,,,,,,";
         }
+        
+        // Add model_name column at the end
+        row += $",{modelName}";
 
         writer.WriteLine(row);
         writer.Flush();

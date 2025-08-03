@@ -176,7 +176,6 @@ public class StartValidator : MonoBehaviour
         // Log start of model building through TrackingManagers on TrackingManager
         EyeTrackingManager etTracker = GameObject.Find("TrackingManager")?.GetComponent<EyeTrackingManager>();
         ViveTrackerManager btTracker = GameObject.Find("TrackingManager")?.GetComponent<ViveTrackerManager>();
-        IndexControllerLogger ctTracker = GameObject.Find("TrackingManager")?.GetComponent<IndexControllerLogger>();
 
         if (etTracker != null)
         {
@@ -185,10 +184,6 @@ public class StartValidator : MonoBehaviour
         if (btTracker != null)
         {
             btTracker.RecordModelBuildStart();
-        }
-        if (ctTracker != null)
-        {
-            ctTracker.RecordModelBuildStart();
         }
         // 30.07.2025 end
     }
