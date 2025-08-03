@@ -96,6 +96,10 @@ public class TutorialGameManager : MonoBehaviour
 
     private void Start()
     {
+        // Set target frame rate to 90 FPS for optimal VR performance
+        Application.targetFrameRate = 90;
+        Debug.Log("GameManager: Set target frame rate to 90 FPS for VR optimization");
+
         // Get participant code from PlayerPrefs (same as GameManager)
         participantCode = PlayerPrefs.GetString("ParticipantCode", "P001");
         Debug.Log($"TutorialGameManager: Retrieved participant code from PlayerPrefs: '{participantCode}'");
@@ -511,6 +515,23 @@ public class TutorialGameManager : MonoBehaviour
                 Destroy(child.gameObject);
 
             Instantiate(resourceBrickPrefabs[currentResourceBrickIndex], resourceBrickSpawnPoint);
+
+            // 30.07.2025 begin
+
+            // Log start of model building through TrackingManagers on TrackingManager
+            EyeTrackingManager etTracker = GameObject.Find("TrackingManager")?.GetComponent<EyeTrackingManager>();
+            ViveTrackerManager btTracker = GameObject.Find("TrackingManager")?.GetComponent<ViveTrackerManager>();
+
+            if (etTracker != null)
+            {
+                etTracker.RecordModelBuildStart();
+            }
+            if (btTracker != null)
+            {
+                btTracker.RecordModelBuildStart();
+            }
+            // 30.07.2025 end
+
 
             // Step 5: enable next level button for the next ruthrough
             nextItemButton.SetActive(true);

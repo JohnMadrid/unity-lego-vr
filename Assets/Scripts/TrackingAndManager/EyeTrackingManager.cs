@@ -367,13 +367,13 @@ public class EyeTrackingManager : MonoBehaviour
         // {
         //     modelNumber = 1; // Start with model 1 if it was -1
         // }
-        Debug.Log($"Model '{modelName}'");
+        Debug.Log($"Model '{modelName}' build started at {DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}");
     }
 
     public void RecordModelBuildEnd()
     {
         isBuildingModel = false;
-        Debug.Log($"Model '{modelName}'");
+        Debug.Log($"Model '{modelName}' build ended at {DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}");
         // modelNumber++; // This line is removed
     }
     

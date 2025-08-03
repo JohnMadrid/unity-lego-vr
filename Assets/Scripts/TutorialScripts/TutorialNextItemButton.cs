@@ -15,17 +15,48 @@ public class TutorialNextItemButton : MonoBehaviour {
 
     public void OnPress()
     {
+        Debug.Log("TutorialNextItemButton: OnPress() called.");
+
         // 30.07.2025 begin
         // Trigger logging of model build end
-        eyeTrackingManager?.RecordModelBuildEnd();
-        viveTrackerManager?.RecordModelBuildEnd();
+        if (eyeTrackingManager != null)
+        {
+            Debug.Log("TutorialNextItemButton: Calling eyeTrackingManager.RecordModelBuildEnd().");
+            eyeTrackingManager.RecordModelBuildEnd();
+        }
+        else
+        {
+            Debug.LogWarning("TutorialNextItemButton: eyeTrackingManager is not assigned.");
+        }
+
+        if (viveTrackerManager != null)
+        {
+            Debug.Log("TutorialNextItemButton: Calling viveTrackerManager.RecordModelBuildEnd().");
+            viveTrackerManager.RecordModelBuildEnd();
+        }
+        else
+        {
+            Debug.LogWarning("TutorialNextItemButton: viveTrackerManager is not assigned.");
+        }
         // 30.07.2025 end
 
+        Debug.Log("TutorialNextItemButton: Starting CaptureAndReset coroutine.");
         StartCoroutine(CaptureAndReset());
     }
 
     private IEnumerator CaptureAndReset()
     {
-        yield return StartCoroutine(tutorialScreenshotManager.CaptureScreenshotsAndContinue(tutorialGameManager));
+        Debug.Log("TutorialNextItemButton: CaptureAndReset coroutine started.");
+        if (tutorialScreenshotManager != null)
+        {
+            Debug.Log("TutorialNextItemButton: Starting tutorialScreenshotManager.CaptureScreenshotsAndContinue coroutine.");
+            yield return StartCoroutine(tutorialScreenshotManager.CaptureScreenshotsAndContinue(tutorialGameManager));
+            Debug.Log("TutorialNextItemButton: tutorialScreenshotManager.CaptureScreenshotsAndContinue coroutine finished.");
+        }
+        else
+        {
+            Debug.LogError("TutorialNextItemButton: tutorialScreenshotManager is not assigned. Cannot proceed.");
+        }
+        Debug.Log("TutorialNextItemButton: CaptureAndReset coroutine finished.");
     }
 }
