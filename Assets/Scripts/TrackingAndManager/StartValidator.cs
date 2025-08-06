@@ -31,6 +31,9 @@ public class StartValidator : MonoBehaviour
     public GameObject ValidationButtonRight;
     public GameObject NextLevelButton;
     // 27.06.2025 end
+    // 05.08.2025 begin
+    public GameObject modelBuildingPlate; // plate where the model is built on on work desk
+    // 05.08.2025 end
 
     // 03.07.2025 begin
     public GameObject fixationPanel;
@@ -194,6 +197,9 @@ public class StartValidator : MonoBehaviour
         ValidationButtonRight?.SetActive(true);
         NextLevelButton?.SetActive(false);
         // 27.06.2025 end
+        // 05.08.2025 begin
+        modelBuildingPlate.SetActive(false); // Disable model building plate for building
+        // 05.08.2025 end
 
         // 03.07.2025 begin
         fixationPanel?.SetActive(true); // Enable fixation panel

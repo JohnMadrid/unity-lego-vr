@@ -48,7 +48,10 @@ public class GameManager : MonoBehaviour
     // 03.07.2025 end
 
     public string participantCode; // 30.07.2025 Participant code to be set from input field
-    public bool complexityTracking = true; // Flag to enable/disable complexity tracking
+
+    // 05.08.2025 begin
+    public bool iQuestionsTracking = true; // Flag to enable/disable I-Questions tracking
+    // 05.08.2025 end
     public int trialNumber; // Current trial number
     private string csvPathQ1; // change this
     private string csvPathQ2; // change this
@@ -83,6 +86,9 @@ public class GameManager : MonoBehaviour
     public GameObject continueButton; // same position as next item button but continues to next question
     public GameObject continuePanel; // implements text for nextitembutton and continue button (display "Next" btw questions and "Finish" between item and questions)
     // 03.07.2025 end
+    // 05.08.2025 begin
+    public GameObject modelBuildingPlate; // plate where the model is built on on work desk
+    // 05.08.2025 end
 
     // 10.07.2025 begin
     public GameObject instructionCanvas; // anvas holding text to press next between questions and indicating that condition is over
@@ -203,6 +209,9 @@ public class GameManager : MonoBehaviour
         startValidator.fixationCross.SetActive(false);
         fixationPanel.SetActive(false); // Disable fixation panel
         nextItemButton.SetActive(false); // Disable next item button
+        // 05.08.2025 begin
+        modelBuildingPlate.SetActive(false); // Disable model building plate
+        // 05.08.2025 end
 
         // 10.07.2025 begin
         // disable the texts on the continue/next button since it is not visible anyway
@@ -543,8 +552,9 @@ public class GameManager : MonoBehaviour
 
     // 03.07.2025 begin
     void SaveResponseToCSV(string response)
-    {
-        if (!complexityTracking) // If tracking is disabled
+    { //05.08.2025 begin
+        if (!iQuestionsTracking) // If tracking is disabled
+        // 05.08.2025 end
             return;
 
         Directory.CreateDirectory(questionLogPath); // Ensure directory exists
@@ -627,7 +637,7 @@ public class GameManager : MonoBehaviour
         // 08.07.2025 begin
         // to load last item in lis AND the questions, ned to run thorugh process in activated in LoadNextItem() once more than items in Item list
         // -> need here to check whether need to start validation (currentItemIndex < modelPrefabs.Length) or if need ti break before next scene (currentItemIndex = modelPrefabs.Length)
-        if (currentItemIndex < modelPrefabs.Length) 
+        if (currentItemIndex < modelPrefabs.Length)
         {
             // Step 1: Reset the fixation/button validation UI
             startValidator.ResetValidator();
@@ -667,7 +677,7 @@ public class GameManager : MonoBehaviour
             // Step 5: enable next level button for the next ruthrough
             nextItemButton.SetActive(true);
 
-            
+
             // 10.07.2025 begin
             // disable the texts for next and enable text to press finish to go from model to first question
             continuePanel.transform.Find("NextText").gameObject.SetActive(false);
@@ -675,8 +685,12 @@ public class GameManager : MonoBehaviour
             // nextCanvas.SetActive(true); // enable next canvas to hide continue button
 
             // 10.07.2025 end
-            
+
             // 03.07.2025 end
+            
+            // 05.08.2025 begin
+            modelBuildingPlate.SetActive(true); // Enable model building plate for building
+            // 05.08.2025 end
         }
         else if (currentItemIndex == modelPrefabs.Length)
         {

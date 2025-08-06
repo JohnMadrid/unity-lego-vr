@@ -1,5 +1,6 @@
 using UnityEngine;
 using System.Collections;
+using UnityEngine.SceneManagement;
 
 public class GazeActivatable : MonoBehaviour
 {
@@ -8,46 +9,42 @@ public class GazeActivatable : MonoBehaviour
     public LayerMask gazeLayerMask;
 
     [Header("Trial 2 Delay Settings")]
-    public float minDelay = 0.7f;
-    public float maxDelay = 3f;
+    public float delay2 = 0.7f;
+    public float delay3 = 2f; // New: Delay for Condition 3
+    // 05.08.2025 commented out
+    //[Header("Trial 3 Visibility Duration")]
+    //public float visibilityDuration = 10f; // New: How long the object stays visible in Trial 3
 
-    [Header("Trial 3 Visibility Duration")]
-    public float visibilityDuration = 10f; // New: How long the object stays visible in Trial 3
-
-    private int trialNumber;
+    public int conditionNumber;
     private Renderer objectRenderer;
     private bool isHovering = false;
     private Coroutine delayCoroutine = null;
 
     // === Trial 3 state ===
-    private bool hasBeenActivated = false;  // Whether the object has been triggered
-    private bool isVisible = false;         // Whether the object is currently visible
+    //private bool hasBeenActivated = false;  // Whether the object has been triggered
+    private bool isVisible = false;  
 
     void Start()
     {
         objectRenderer = GetComponent<Renderer>();
-        if (objectRenderer != null)
-            objectRenderer.enabled = false;
+        
+        // Get the active scene's build index
+        int sceneIndex = SceneManager.GetActiveScene().buildIndex;
+        // Use the scene index directly as the condition number
+        conditionNumber = sceneIndex;
 
-        // Try to get trial number from GameManager, fallback to TutorialGameManager
-        GameManager gm = FindObjectOfType<GameManager>();
-        if (gm != null)
+        // Set initial visibility based on condition
+        if (objectRenderer != null)
         {
-            trialNumber = gm.trialNumber;
-        }
-        else
-        {
-            // Try to find TutorialGameManager instead
-            TutorialGameManager tgm = FindObjectOfType<TutorialGameManager>();
-            if (tgm != null)
+            if (conditionNumber == 0 || conditionNumber == 1) // Tutorial scene and Condition 1
             {
-                trialNumber = tgm.trialNumber;
-                Debug.LogWarning("Using TutorialGameManager as fallback.");
+                objectRenderer.enabled = true; // Show object all the time
+                isVisible = true;
             }
             else
             {
-                Debug.LogWarning("Neither GameManager nor TutorialGameManager found. Defaulting to Trial 1.");
-                trialNumber = 1;
+                objectRenderer.enabled = false; // Hide initially for conditions 2 and 3
+                isVisible = false;
             }
         }
     }
@@ -69,28 +66,27 @@ public class GazeActivatable : MonoBehaviour
                 {
                     isHovering = true;
 
-                    switch (trialNumber)
+                    switch (conditionNumber)
                     {
                         // 24.07.2025 Start
-                        case 0:
-                            ShowObjectImmediate();
+                        case 0: // tutorial scene
+                            // Object is already visible all the time, no action needed
                             break;
                         // 24.07.2025 End
-                        case 1:
-                            ShowObjectImmediate();
+                        case 1: // condition 1
+                            // Object is already visible all the time, no action needed
                             break;
 
-                        case 2:
-                            delayCoroutine = StartCoroutine(ShowObjectWithDelay());
+                        case 2: // condition 2
+                            // Start the delay coroutine to show the object
+                            if (delayCoroutine == null) 
+                                delayCoroutine = StartCoroutine(ShowObjectWithDelay(delay2));
                             break;
 
-                        case 3:
-                            if (!hasBeenActivated)
-                            {
-                                hasBeenActivated = true; // Ensure one-time activation
-                                ShowObjectImmediate();
-                                StartCoroutine(DeactivateAfterDuration()); // 🆕 Start timed disappearance
-                            }
+                        case 3: // condition 3
+                            // Start the delay coroutine to show the object 05.08.2025
+                            if (delayCoroutine == null) 
+                                delayCoroutine = StartCoroutine(ShowObjectWithDelay(delay3));
                             break;
                     }
                 }
@@ -109,18 +105,23 @@ public class GazeActivatable : MonoBehaviour
                 delayCoroutine = null;
             }
 
-            switch (trialNumber)
+            switch (conditionNumber)
             {
                 // 24.07.2025 Start
-                case 0:
+                case 0: // tutorial scene
+                    // Object should stay visible all the time, no hiding
+                    break;
                 // 24.07.2025 End
-                case 1:
-                case 2:
-                    HideObjectImmediate();
+                case 1: // condition 1
+                    // Object should stay visible all the time, no hiding
+                    break;
+                    
+                case 2: // condition 2
+                    HideObjectImmediate(); // Hide immediately when gaze is removed
                     break;
 
-                case 3:
-                    // No longer respond to gaze exit in Trial 3
+                case 3: // condition 3
+                    HideObjectImmediate(); // Hide immediately when gaze is removed
                     break;
             }
         }
@@ -146,17 +147,17 @@ public class GazeActivatable : MonoBehaviour
         }
     }
 
-    IEnumerator ShowObjectWithDelay()
+    IEnumerator ShowObjectWithDelay(float delay)
     {
-        float delay = Random.Range(minDelay, maxDelay);
+        // wait for a specified delay before showing the object
         yield return new WaitForSeconds(delay);
         ShowObjectImmediate();
     }
 
-    // 🆕 Trial 3: Automatically hide object after duration
-    IEnumerator DeactivateAfterDuration()
-    {
-        yield return new WaitForSeconds(visibilityDuration);
-        HideObjectImmediate();
-    }
+    // condition 3: Automatically hide object after duration
+    //IEnumerator DeactivateAfterDuration()
+    //{
+        //yield return new WaitForSeconds(visibilityDuration);
+      //  HideObjectImmediate();
+    //}
 }

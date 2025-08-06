@@ -83,6 +83,10 @@ public class TutorialGameManager : MonoBehaviour
     public GameObject continueButton; // same position as next item button but continues to next question
     public GameObject continuePanel; // implements text for nextitembutton and continue button (display "Next" btw questions and "Finish" between item and questions)
     // 03.07.2025 end
+    
+    // 05.08.2025 begin
+    public GameObject modelBuildingPlate; // plate where the model is built on on work desk
+    // 05.08.2025 end
 
     // 10.07.2025 begin
     public GameObject instructionCanvas; // anvas holding text to press next between questions and indicating that condition is over
@@ -136,7 +140,9 @@ public class TutorialGameManager : MonoBehaviour
         startValidator.fixationCross.SetActive(false);
         fixationPanel.SetActive(false); // Disable fixation panel
         nextItemButton.SetActive(false); // Disable next item button
-
+        // 05.08.2025 begin
+        modelBuildingPlate.SetActive(false); // Disable model building plate
+        // 05.08.2025 end
         // disable the texts on the continue/next button since it is not visible anyway
         continuePanel.transform.Find("NextText").gameObject.SetActive(false);
         continuePanel.transform.Find("FinishText").gameObject.SetActive(false);
@@ -499,7 +505,7 @@ public class TutorialGameManager : MonoBehaviour
     {
         // to load last item in lis AND the questions, ned to run thorugh process in activated in LoadNextItem() once more than items in Item list
         // -> need here to check whether need to start validation (currentItemIndex < modelPrefabs.Length) or if need ti break before next scene (currentItemIndex = modelPrefabs.Length)
-        if (currentItemIndex < modelPrefabs.Length) 
+        if (currentItemIndex < modelPrefabs.Length)
         {
             // Step 1: Reset the fixation/button validation UI
             startValidator.ResetValidator();
@@ -536,10 +542,13 @@ public class TutorialGameManager : MonoBehaviour
             // Step 5: enable next level button for the next ruthrough
             nextItemButton.SetActive(true);
 
-            
+
             // disable the texts for next and enable text to press finish to go from model to first question
             continuePanel.transform.Find("NextText").gameObject.SetActive(false);
             continuePanel.transform.Find("FinishText").gameObject.SetActive(true);
+            // 05.08.2025 begin
+            modelBuildingPlate.SetActive(true); // Enable model building plate for building
+            // 05.08.2025 end
         }
         else if (currentItemIndex == modelPrefabs.Length)
         {
