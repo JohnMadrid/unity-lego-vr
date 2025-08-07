@@ -514,7 +514,39 @@ public class TutorialGameManager : MonoBehaviour
             yield return new WaitUntil(() => startValidator.IsValidated);
 
             // Step 3: spawn the new one in model (clearing took place in Showquestion function question phase 1)
-            Instantiate(modelPrefabs[currentItemIndex], modelSpawnPoint);
+            GameObject spawnedModel = Instantiate(modelPrefabs[currentItemIndex], modelSpawnPoint);
+            
+            // 08.08.2025 Start: Manually control the GazeActivatable script state after spawning.
+            GazeActivatable gazeScript = spawnedModel.GetComponent<GazeActivatable>();
+            if (gazeScript != null)
+            {
+                int sceneIndex = SceneManager.GetActiveScene().buildIndex;
+                bool isTrainingModel = spawnedModel.name.Contains("TM");
+
+                if (isTrainingModel)
+                {
+                    // For the Training Model, only enable gaze activation in Conditions 2 and 3.
+                    if (sceneIndex == 2 || sceneIndex == 3)
+                    {
+                        gazeScript.enabled = true;
+                        // 08.08.2025 Start: Set the layer mask to the correct value for these conditions.
+                        gazeScript.gazeLayerMask = LayerMask.GetMask("GazeInteractable");
+                        Debug.Log("TutorialGameManager: Training Model spawned in Condition 2/3. GazeActivatable script ENABLED and LayerMask set to 'GazeInteractable'.");
+                        // 08.08.2025 End
+                    }
+                    else
+                    {
+                        gazeScript.enabled = false;
+                        Debug.Log("TutorialGameManager: Training Model spawned. GazeActivatable script has been DISABLED.");
+                    }
+                }
+                else
+                {
+                    // For all other models, ensure the script is enabled.
+                    gazeScript.enabled = true;
+                }
+            }
+            // 08.08.2025 End
 
             // Step 4: Spawn resource bricks like models in step 3
             foreach (Transform child in resourceBrickSpawnPoint)
