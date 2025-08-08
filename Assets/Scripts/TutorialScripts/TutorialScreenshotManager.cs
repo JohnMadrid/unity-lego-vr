@@ -19,6 +19,71 @@ public class TutorialScreenshotManager : MonoBehaviour
     // Directory where screenshots will be saved
     private string screenshotPath = @"D:\LegoVR\unity-lego-vr\Other_than_in_project_files\Screenshot_Data";
 
+    // 07.08.2025 Start: Fixed screenshot resolution and reusable buffers ~J
+    // Use a fixed output resolution independent of Game view size to control
+    // file size and remove dependency on screen resolution.
+    [SerializeField] private int targetWidth = 1600;   // width in pixels
+    [SerializeField] private int targetHeight = 900;   // height in pixels
+
+    // Shared render targets/textures reused across all five captures to
+    // minimize allocations and GC spikes.
+    private RenderTexture sharedRenderTexture;
+    private Texture2D sharedTexture;
+    private Rect captureRect;
+
+    /// <summary>
+    /// Ensures the reusable buffers exist and match the configured resolution.
+    /// </summary>
+    private void EnsureBuffers()
+    {
+        // Create or recreate the shared RenderTexture if dimensions changed
+        if (sharedRenderTexture == null || sharedRenderTexture.width != targetWidth || sharedRenderTexture.height != targetHeight)
+        {
+            ReleaseBuffers();
+            sharedRenderTexture = new RenderTexture(targetWidth, targetHeight, 24);
+            sharedRenderTexture.Create();
+        }
+
+        // Create or recreate the shared Texture2D if dimensions changed
+        if (sharedTexture == null || sharedTexture.width != targetWidth || sharedTexture.height != targetHeight)
+        {
+            sharedTexture = new Texture2D(targetWidth, targetHeight, TextureFormat.RGB24, false);
+        }
+
+        // Precompute the capture rectangle
+        captureRect = new Rect(0, 0, targetWidth, targetHeight);
+    }
+
+    /// <summary>
+    /// Releases and destroys reusable GPU/CPU buffers.
+    /// </summary>
+    private void ReleaseBuffers()
+    {
+        if (sharedRenderTexture != null)
+        {
+            sharedRenderTexture.Release();
+            Destroy(sharedRenderTexture);
+            sharedRenderTexture = null;
+        }
+
+        if (sharedTexture != null)
+        {
+            Destroy(sharedTexture);
+            sharedTexture = null;
+        }
+    }
+
+    private void OnDisable()
+    {
+        ReleaseBuffers();
+    }
+
+    private void OnDestroy()
+    {
+        ReleaseBuffers();
+    }
+    // 07.08.2025 End ~J
+
     /// <summary>
     /// Captures screenshots from all five cameras after a short delay,
     /// then continues to the next item via GameManager.
@@ -37,11 +102,19 @@ public class TutorialScreenshotManager : MonoBehaviour
         Camera[] cameras = { frontCamera, backCamera, leftCamera, rightCamera, topCamera };
         string[] positions = { "Front", "Back", "Left", "Right", "Top" };
 
-        // Capture from each camera sequentially
+        // 07.08.2025 Start: Ensure buffers and capture one camera per frame to reduce stutter ~J
+        // Prepare the shared buffers once before starting the multi-camera capture.
+        EnsureBuffers();
+
+        // Capture from each camera sequentially with a yield between shots to
+        // distribute work across frames and avoid blocking a single frame.
         for (int i = 0; i < cameras.Length; i++)
         {
             yield return StartCoroutine(CaptureFromCamera(cameras[i], positions[i], participantCode, conditionName, modelIndex, modelName));
+            // Let the engine breathe one extra frame between shots (disk IO/GC)
+            yield return null;
         }
+        // 07.08.2025 End ~J
 
         // Continue experiment flow
         tutorialGameManager.LoadNextItem();
@@ -52,34 +125,42 @@ public class TutorialScreenshotManager : MonoBehaviour
     /// </summary>
     private IEnumerator CaptureFromCamera(Camera cam, string position, string participantCode, string conditionName, int modelIndex, string modelName)
     {
-        // Wait until the frame is fully rendered
+        // 07.08.2025 Start: Per-frame capture using reusable buffers ~J
+        // Step 1: Wait until the current frame finishes rendering to avoid partial frames
         yield return new WaitForEndOfFrame();
 
-        // Create a temporary render texture for capturing
-        RenderTexture rt = new RenderTexture(Screen.width, Screen.height, 24);
-        cam.targetTexture = rt;
+        // Step 2: Ensure the reusable buffers exist
+        EnsureBuffers();
 
-        // Create a texture to store the screenshot
-        Texture2D screenshot = new Texture2D(Screen.width, Screen.height, TextureFormat.RGB24, false);
+        // Step 3: Temporarily set camera to render into the shared RenderTexture
+        RenderTexture previousActive = RenderTexture.active;
+        RenderTexture previousTarget = cam.targetTexture;
 
-        // Render the camera view and read pixels into the texture
+        // Optionally enforce a stable aspect matching the capture resolution
+        float originalAspect = cam.aspect;
+        float targetAspect = (float)targetWidth / targetHeight;
+        cam.aspect = targetAspect;
+
+        cam.targetTexture = sharedRenderTexture;
         cam.Render();
-        RenderTexture.active = rt;
-        screenshot.ReadPixels(new Rect(0, 0, Screen.width, Screen.height), 0, 0);
-        screenshot.Apply();
 
-        // Clean up render texture
-        cam.targetTexture = null;
-        RenderTexture.active = null;
-        Destroy(rt);
+        // Step 4: Read pixels from GPU into the shared Texture2D
+        RenderTexture.active = sharedRenderTexture;
+        sharedTexture.ReadPixels(captureRect, 0, 0, false);
+        sharedTexture.Apply(false, false);
 
-        // Generate timestamp and filename
+        // Step 5: Restore camera and RT state
+        cam.targetTexture = previousTarget;
+        RenderTexture.active = previousActive;
+        cam.aspect = originalAspect;
+
+        // Step 6: Build filename and write PNG to disk
         string timestamp = DateTime.Now.ToString("yyyy-MM-dd-HH-mm-ss");
         string filename = $"{participantCode}_{conditionName}_Model{modelIndex}_{modelName}_{position}_{timestamp}.png";
         string fullPath = Path.Combine(screenshotPath, filename);
 
-        // Save the screenshot to disk
-        File.WriteAllBytes(fullPath, screenshot.EncodeToPNG());
+        File.WriteAllBytes(fullPath, sharedTexture.EncodeToPNG());
         Debug.Log($"Screenshot saved: {fullPath}");
+        // 07.08.2025 End ~J
     }
 }

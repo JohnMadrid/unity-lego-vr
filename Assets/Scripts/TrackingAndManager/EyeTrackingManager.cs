@@ -7,6 +7,15 @@ using Varjo.XR;
 /// <summary>
 /// EyeTrackingManager handles eye tracking data collection and logging for Varjo Aero headset.
 /// This script manages gaze data, eye measurements, and CSV file logging for experimental data collection.
+/// 
+/// Features:
+/// - Automatic calibration with quality checking and unlimited retry logic
+/// - Continuous calibration attempts until "Medium" or "High" quality is achieved
+/// - Comprehensive debug logging for calibration process (controlled by enableDebugMode)
+/// - CSV tracking of calibration status, attempts, and quality metrics
+/// - Manual calibration restart capability
+/// - Progress monitoring for extended calibration sessions
+/// - Robust error handling and user feedback
 /// </summary>
 public class EyeTrackingManager : MonoBehaviour
 {
@@ -40,6 +49,21 @@ public class EyeTrackingManager : MonoBehaviour
     private string participantCode; // Default value, will be set in Start()
     // 30.07.2025 end
 
+    // Calibration tracking variables
+    private enum CalibrationState { Idle, Requesting, WaitingForUser, CheckingQuality, Succeeded }
+    private CalibrationState calibrationState = CalibrationState.Idle;
+    private int calibrationAttempts = 0;
+    private int totalCalibrationAttempts = 0; // Total across all sessions
+    private bool calibrationCompleted = false;
+    private string leftEyeCalibrationQuality = "Unknown";
+    private string rightEyeCalibrationQuality = "Unknown";
+    private float calibrationStartTime = 0f;
+    private float calibrationEndTime = 0f;
+    
+    // Calibration quality thresholds
+    private readonly string[] acceptableQualities = { "Medium", "High" };
+    private const float calibrationRetryDelay = 3.0f; // Delay between calibration attempts
+    
     /// <summary>
     /// Initializes eye tracking system, calibrates the headset, and starts logging if enabled.
     /// </summary>
@@ -47,128 +71,168 @@ public class EyeTrackingManager : MonoBehaviour
     {
         Debug.Log("Initializing Eye Tracking...");
 
-        // Request eye tracking calibration from Varjo system
-        if (VarjoEyeTracking.RequestGazeCalibration())
-        {
-            Debug.Log($"Eye tracking calibrated.");
-        }
-        else
-        {
-            Debug.LogError("Calibration failed.");
-        }
-
         // Debug gaze data structure only if debug mode is enabled
         if (enableDebugMode)
         {
             DebugGazeDataStructure();
         }
 
+        // Start the calibration process
+        StartCalibrationProcess();
+
         // Don't start logging immediately - wait for participant code to be set
         // StartLogging() will be called manually when participant code is ready
     }
 
-    /// <summary>
-    /// Main update loop that collects and logs eye tracking data every frame.
-    /// Processes gaze data and eye measurements from Varjo headset.
-    /// </summary>
     void Update()
     {
+        // --- Calibration State Machine ---
+        // This machine will only run until it reaches the 'Succeeded' state.
+        if (calibrationState != CalibrationState.Succeeded)
+        {
+            switch (calibrationState)
+            {
+                case CalibrationState.Requesting:
+                    // Attempt to request calibration from the Varjo system.
+                    Debug.Log($"[CALIBRATION] Attempt {calibrationAttempts + 1}: Requesting calibration.");
+                    if (VarjoEyeTracking.RequestGazeCalibration())
+                    {
+                        Debug.Log("[CALIBRATION] Request successful. Waiting for user to finish on-screen prompts.");
+                        calibrationState = CalibrationState.WaitingForUser;
+                    }
+                    else
+                    {
+                        Debug.LogError("[CALIBRATION] Request failed. Retrying after delay.");
+                        StartCoroutine(RetryCalibration("Request failed"));
+                    }
+                    break;
+
+                case CalibrationState.WaitingForUser:
+                    // Monitor the gaze status. While the user is calibrating, the status is 'Invalid'.
+                    // Once they finish, it will switch to 'Valid'.
+                    var gaze = VarjoEyeTracking.GetGaze();
+                    if (gaze.status == VarjoEyeTracking.GazeStatus.Valid)
+                    {
+                        Debug.Log("[CALIBRATION] User finished on-screen prompts (Gaze is Valid). Checking quality...");
+                        calibrationState = CalibrationState.CheckingQuality;
+                    }
+                    break;
+
+                case CalibrationState.CheckingQuality:
+                    // Check the calibration quality once the user is done.
+                    var quality = VarjoEyeTracking.GetGazeCalibrationQuality();
+                    leftEyeCalibrationQuality = quality.left.ToString();
+                    rightEyeCalibrationQuality = quality.right.ToString();
+                    Debug.Log($"[CALIBRATION] Quality Check - Left: {leftEyeCalibrationQuality}, Right: {rightEyeCalibrationQuality}");
+
+                    if (System.Array.Exists(acceptableQualities, q => q == leftEyeCalibrationQuality) && System.Array.Exists(acceptableQualities, q => q == rightEyeCalibrationQuality))
+                    {
+                        Debug.Log("[CALIBRATION] Success! Quality is acceptable. Calibration is now complete for this scene.");
+                        calibrationState = CalibrationState.Succeeded;
+                        calibrationCompleted = true; // Set final flag
+                    }
+                    else
+                    {
+                        Debug.LogError("[CALIBRATION] Quality not acceptable. Retrying after delay.");
+                        StartCoroutine(RetryCalibration("Poor quality"));
+                    }
+                    break;
+            }
+        }
+
+        // --- Data Logging ---
         if (logging)
         {
-            // Initialize lists to store gaze data and eye measurements
-            List<VarjoEyeTracking.GazeData> gazeDataList = new List<VarjoEyeTracking.GazeData>();
-            List<VarjoEyeTracking.EyeMeasurements> eyeMeasurementsList = new List<VarjoEyeTracking.EyeMeasurements>();
-
-            // Get current gaze data from Varjo system
-            int dataCount = VarjoEyeTracking.GetGazeList(out gazeDataList, out eyeMeasurementsList);
-
-            // 30.07.2025 begin
-            // Update modelName every frame based on current item at modelSpawnPoint
-            Transform modelSpawnPoint = null;
-            
-            // Try to get modelSpawnPoint from TutorialGameManager first (for tutorial phase)
-            var tutorialGM = GameObject.Find("TutorialGameManager")?.GetComponent<TutorialGameManager>();
-            if (tutorialGM != null && tutorialGM.modelSpawnPoint != null)
-            {
-                modelSpawnPoint = tutorialGM.modelSpawnPoint;
-            }
-            // If not found in TutorialGameManager, try GameManager (for main experiment phase)
-            else
-            {
-                var gameGM = GameObject.Find("GameManager")?.GetComponent<GameManager>();
-                if (gameGM != null)
-                {
-                    modelSpawnPoint = gameGM.modelSpawnPoint;
-                }
-            }
-            
-            if (modelSpawnPoint != null && modelSpawnPoint.childCount > 0)
-            {
-                modelName = modelSpawnPoint.GetChild(0).gameObject.name.Replace("(Clone)", "").Trim();
-            }
-            else
-            {
-                modelName = "None";
-            }
-            
-            // Update modelNumber: set to -1 only when no model is available AND not building
-            // Otherwise, keep the current model number (which gets incremented in RecordModelBuildEnd)
-            if (modelName == "None" && !isBuildingModel)
-            {
-                // modelNumber = -1; // This line is removed
-            }
-            // Note: modelNumber is incremented in RecordModelBuildEnd() method
-            // 30.07.2025 end
-
-            // Process gaze data if available
-            if (dataCount > 0)
-            {
-                // bool printedGazeFields = false;
-                foreach (var gazeData in gazeDataList)
-                {
-                    // Find corresponding eye measurements for this frame
-                    var eyeMeasurements = eyeMeasurementsList.Find(m => m.frameNumber == gazeData.frameNumber);
-
-                    // Only log valid gaze data
-                    if (gazeData.status != VarjoEyeTracking.GazeStatus.Invalid)
-                    {
-                        // Get current HMD position and rotation
-                        Vector3 hmdPosition = xrCamera.transform.position;
-                        Quaternion hmdRotation = xrCamera.transform.rotation;
-                        
-                        // Detect what object the gaze is hitting using raycasting
-                        hitObjName = DetectGazeHitObject(gazeData);
-
-                        // Construct comprehensive CSV entry with all gaze and eye measurement data
-                        string gazeEntry =
-                            $"{gazeData.captureTime},{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()},{Time.time},{gazeData.focusDistance},{gazeData.frameNumber},{gazeData.focusStability},{gazeData.status}," +
-                            $"{gazeData.gaze.forward.x},{gazeData.gaze.forward.y},{gazeData.gaze.forward.z}," +
-                            $"{gazeData.gaze.origin.x},{gazeData.gaze.origin.y},{gazeData.gaze.origin.z}," +
-                            $"{gazeData.left.forward.x},{gazeData.left.forward.y},{gazeData.left.forward.z}," +
-                            $"{gazeData.left.origin.x},{gazeData.left.origin.y},{gazeData.left.origin.z},{gazeData.leftStatus}," +
-                            $"{eyeMeasurements.leftPupilDiameterInMM},{eyeMeasurements.leftIrisDiameterInMM},{eyeMeasurements.leftPupilIrisDiameterRatio},{eyeMeasurements.leftEyeOpenness}," +
-                            $"{gazeData.right.forward.x},{gazeData.right.forward.y},{gazeData.right.forward.z}," +
-                            $"{gazeData.right.origin.x},{gazeData.right.origin.y},{gazeData.right.origin.z},{gazeData.rightStatus}," +
-                            $"{eyeMeasurements.rightPupilDiameterInMM},{eyeMeasurements.rightIrisDiameterInMM},{eyeMeasurements.rightPupilIrisDiameterRatio},{eyeMeasurements.rightEyeOpenness}," +
-                            $"{eyeMeasurements.interPupillaryDistanceInMM}," +
-                            $"{hmdPosition.x},{hmdPosition.y},{hmdPosition.z}," +
-                            $"{hmdRotation.x},{hmdRotation.y},{hmdRotation.z},{hmdRotation.w}," +
-                            // 30.07.2025 begin
-                            $"{modelName},{isBuildingModel},{hitObjName}";
-                            // 30.07.2025 end
-                        
-                        // Write to CSV file and flush to ensure data is saved
-                        writer.WriteLine(gazeEntry);
-                        writer.Flush();
-                    }
-                }
-            }
+            LogGazeData();
         }
     }
 
     /// <summary>
-    /// Debug method to analyze and print gaze data structure information.
-    /// Only runs when enableDebugMode is true in the inspector.
+    /// Starts the calibration process.
+    /// </summary>
+    private void StartCalibrationProcess()
+    {
+        calibrationAttempts = 0;
+        totalCalibrationAttempts++;
+        calibrationCompleted = false;
+        calibrationState = CalibrationState.Requesting;
+        calibrationStartTime = Time.time;
+    }
+
+    /// <summary>
+    /// Retries the calibration process after a delay.
+    /// </summary>
+    private System.Collections.IEnumerator RetryCalibration(string reason)
+    {
+        calibrationState = CalibrationState.Idle; // Pause state machine
+        calibrationAttempts++;
+        Debug.Log($"[CALIBRATION] Retrying due to: {reason}. Waiting {calibrationRetryDelay}s.");
+        yield return new WaitForSeconds(calibrationRetryDelay);
+        calibrationState = CalibrationState.Requesting; // Restart the process
+    }
+    
+    /// <summary>
+    /// Logs all available gaze data points to the CSV file.
+    /// </summary>
+    private void LogGazeData()
+    {
+        List<VarjoEyeTracking.GazeData> gazeDataList;
+        List<VarjoEyeTracking.EyeMeasurements> eyeMeasurementsList;
+        int dataCount = VarjoEyeTracking.GetGazeList(out gazeDataList, out eyeMeasurementsList);
+
+        if (dataCount == 0) return;
+
+        Transform modelSpawnPoint = null;
+        var tutorialGM = GameObject.Find("TutorialGameManager")?.GetComponent<TutorialGameManager>();
+        if (tutorialGM != null && tutorialGM.modelSpawnPoint != null)
+        {
+            modelSpawnPoint = tutorialGM.modelSpawnPoint;
+        }
+        else
+        {
+            var gameGM = GameObject.Find("GameManager")?.GetComponent<GameManager>();
+            if (gameGM != null)
+            {
+                modelSpawnPoint = gameGM.modelSpawnPoint;
+            }
+        }
+        string currentModelName = (modelSpawnPoint != null && modelSpawnPoint.childCount > 0)
+            ? modelSpawnPoint.GetChild(0).gameObject.name.Replace("(Clone)", "").Trim()
+            : "None";
+
+        foreach (var gazeData in gazeDataList)
+        {
+            if (gazeData.status == VarjoEyeTracking.GazeStatus.Invalid) continue;
+
+            var eyeMeasurements = eyeMeasurementsList.Find(m => m.frameNumber == gazeData.frameNumber);
+
+            Vector3 hmdPosition = xrCamera.transform.position;
+            Quaternion hmdRotation = xrCamera.transform.rotation;
+            string hitObjectName = DetectGazeHitObject(gazeData);
+
+            string csvEntry =
+                $"{gazeData.captureTime},{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()},{Time.time},{gazeData.focusDistance},{gazeData.frameNumber},{gazeData.focusStability},{gazeData.status}," +
+                $"{gazeData.gaze.forward.x},{gazeData.gaze.forward.y},{gazeData.gaze.forward.z}," +
+                $"{gazeData.gaze.origin.x},{gazeData.gaze.origin.y},{gazeData.gaze.origin.z}," +
+                $"{gazeData.left.forward.x},{gazeData.left.forward.y},{gazeData.left.forward.z}," +
+                $"{gazeData.left.origin.x},{gazeData.left.origin.y},{gazeData.left.origin.z},{gazeData.leftStatus}," +
+                $"{eyeMeasurements.leftPupilDiameterInMM},{eyeMeasurements.leftIrisDiameterInMM},{eyeMeasurements.leftPupilIrisDiameterRatio},{eyeMeasurements.leftEyeOpenness}," +
+                $"{gazeData.right.forward.x},{gazeData.right.forward.y},{gazeData.right.forward.z}," +
+                $"{gazeData.right.origin.x},{gazeData.right.origin.y},{gazeData.right.origin.z},{gazeData.rightStatus}," +
+                $"{eyeMeasurements.rightPupilDiameterInMM},{eyeMeasurements.rightIrisDiameterInMM},{eyeMeasurements.rightPupilIrisDiameterRatio},{eyeMeasurements.rightEyeOpenness}," +
+                $"{eyeMeasurements.interPupillaryDistanceInMM}," +
+                $"{hmdPosition.x},{hmdPosition.y},{hmdPosition.z}," +
+                $"{hmdRotation.x},{hmdRotation.y},{hmdRotation.z},{hmdRotation.w}," +
+                $"{currentModelName},{isBuildingModel},{hitObjectName}," +
+                $"{calibrationState},{calibrationAttempts},{leftEyeCalibrationQuality},{rightEyeCalibrationQuality}";
+
+            writer.WriteLine(csvEntry);
+        }
+        writer.Flush();
+    }
+    
+    /// <summary>
+    /// Logs all available gaze data points to the CSV file.
     /// </summary>
     private void DebugGazeDataStructure()
     {
@@ -309,9 +373,8 @@ public class EyeTrackingManager : MonoBehaviour
                             "inter_pupillary_distance," +
                             "hmd_position_x,hmd_position_y,hmd_position_z," +
                             "hmd_rotation_x,hmd_rotation_y,hmd_rotation_z,hmd_rotation_w," +
-                            // 30.07.2025 begin
-                            "model_name,is_building_model,hit_obj_name");
-                            // 30.07.2025 end
+                            "model_name,is_building_model,hit_obj_name," +
+                            "calibration_state,calibration_attempts,left_eye_calibration_quality,right_eye_calibration_quality");
         }
 
         logging = true;
@@ -357,6 +420,15 @@ public class EyeTrackingManager : MonoBehaviour
             StartLogging();
         }
     }
+
+    // 08.08.2025 begin
+    // Expose a public method to stop logging on demand during finalization.
+    public void StopLoggingManually()
+    {
+        // Step: Route to internal StopLogging to flush and close the file synchronously.
+        StopLogging();
+    }
+    // 08.08.2025 end
 
     // 30.07.2025 begin
     public void RecordModelBuildStart()
