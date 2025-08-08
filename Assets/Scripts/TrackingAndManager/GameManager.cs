@@ -100,6 +100,22 @@ public class GameManager : MonoBehaviour
 
     // 30.06.2025 end
 
+    // 08.08.2025 begin
+    [Header("Finalization UI")]
+    [Tooltip("Message shown when the experiment is fully completed.")]
+    public TMP_Text finalMessageText; // Should read: "Experiment completed. Thanks for your participation!"
+
+    [Tooltip("Countdown text shown right before quitting the application.")]
+    public TMP_Text finalCountdownText; // Shows: "Quitting in 1..."
+
+    [Header("Finalization Timing (seconds)")]
+    [Tooltip("How long the final message is displayed before the countdown starts.")]
+    public float finalMessageDisplaySeconds = 3f;
+
+    [Tooltip("Length of the final countdown before quitting.")]
+    public float finalCountdownSeconds = 1f;
+    // 08.08.2025 end
+
     private void Start()
     {
         // Set target frame rate to 90 FPS for optimal VR performance
@@ -709,14 +725,87 @@ public class GameManager : MonoBehaviour
     /// </summary>
     IEnumerator BreakBeforeNextScene()
     {
-        Debug.Log($"Break time! Waiting for {breakDuration} seconds.");
-        yield return new WaitForSeconds(breakDuration);
-
         int currentSceneIndex = SceneManager.GetActiveScene().buildIndex;
+        bool hasNextScene = (currentSceneIndex + 1 < SceneManager.sceneCountInBuildSettings);
 
-        if (currentSceneIndex + 1 < SceneManager.sceneCountInBuildSettings)
+        if (hasNextScene)
+        {
+            // Keep existing break behavior for intermediate scenes
+            Debug.Log($"Break time! Waiting for {breakDuration} seconds before next scene.");
+            yield return new WaitForSeconds(breakDuration);
             SceneManager.LoadScene(currentSceneIndex + 1);
+        }
         else
-            Debug.Log("All levels complete!");
+        {
+            // 08.08.2025 begin
+            // Final scene reached: run finalization flow (no 15-minute break).
+            Debug.Log("All levels complete! Initiating finalization and graceful quit.");
+            yield return StartCoroutine(FinalizeAndQuit());
+            // 08.08.2025 end
+        }
     }
+
+    // 08.08.2025 begin
+    // Finalization flow to cleanly stop logging and quit application
+    private IEnumerator FinalizeAndQuit()
+    {
+        // Step 1: Show final message so participant can read it
+        if (finalMessageText != null)
+        {
+            finalMessageText.text = "Experiment completed. Thanks for your participation!";
+            finalMessageText.gameObject.SetActive(true);
+        }
+
+        // Hide guidance texts related to continuing/finishing
+        if (instructionCanvas != null)
+        {
+            var pressNext = instructionCanvas.transform.Find("PressNextText");
+            if (pressNext != null) pressNext.gameObject.SetActive(false);
+            var finishText = instructionCanvas.transform.Find("ConditionFinishText");
+            if (finishText != null) finishText.gameObject.SetActive(true);
+        }
+
+        // Allow time to read the message
+        yield return new WaitForSeconds(Mathf.Max(0f, finalMessageDisplaySeconds));
+
+        // Step 2: Show short countdown before quitting
+        int countdown = Mathf.Max(1, Mathf.RoundToInt(finalCountdownSeconds));
+        for (int i = countdown; i >= 1; i--)
+        {
+            if (finalCountdownText != null)
+            {
+                finalCountdownText.text = $"Quitting in {i}...";
+                finalCountdownText.gameObject.SetActive(true);
+            }
+            yield return new WaitForSeconds(1f);
+        }
+
+        // Step 3: Stop ET/BT logging explicitly (flush and close files)
+        var eyeTrackingManager = FindObjectOfType<EyeTrackingManager>();
+        if (eyeTrackingManager != null)
+        {
+            eyeTrackingManager.StopLoggingManually();
+        }
+        var viveTrackerManager = FindObjectOfType<ViveTrackerManager>();
+        if (viveTrackerManager != null)
+        {
+            viveTrackerManager.StopLoggingManually();
+        }
+
+        // Ensure any PlayerPrefs are saved
+        PlayerPrefs.Save();
+
+        // Give one frame to ensure IO flushes completed on main thread
+        yield return new WaitForEndOfFrame();
+
+        // Step 4: Quit application
+        Application.Quit();
+
+#if UNITY_EDITOR
+        // If running in the editor, stop play mode
+        UnityEditor.EditorApplication.isPlaying = false;
+#endif
+        yield break;
+    }
+    // 08.08.2025 end
 }

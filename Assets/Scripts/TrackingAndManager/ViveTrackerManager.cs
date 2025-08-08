@@ -135,6 +135,15 @@ public class ViveTrackerManager : MonoBehaviour
         }
     }
 
+    // 08.08.2025 begin
+    // Expose a public method to stop logging on demand during finalization.
+    public void StopLoggingManually()
+    {
+        // Step: Route to internal StopLogging to flush and close the file synchronously.
+        StopLogging();
+    }
+    // 08.08.2025 end
+
     // 29.07.2025 start
     void StartLogging()
     {

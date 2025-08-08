@@ -421,6 +421,15 @@ public class EyeTrackingManager : MonoBehaviour
         }
     }
 
+    // 08.08.2025 begin
+    // Expose a public method to stop logging on demand during finalization.
+    public void StopLoggingManually()
+    {
+        // Step: Route to internal StopLogging to flush and close the file synchronously.
+        StopLogging();
+    }
+    // 08.08.2025 end
+
     // 30.07.2025 begin
     public void RecordModelBuildStart()
     {
