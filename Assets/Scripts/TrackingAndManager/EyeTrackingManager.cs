@@ -42,7 +42,9 @@ public class EyeTrackingManager : MonoBehaviour
     // 30.07.2025 begin
     private bool isBuildingModel = false;
     private string modelName = "";
-    private string hitObjName = ""; // Track the name of the object being gazed at
+    // 08.08.2025 begin remove unused field 'hitObjName' (CS0414)
+    // Step: Remove the unused field to resolve the compiler warning; CSV logging uses local 'hitObjectName'.
+    // 08.08.2025 end
     // 30.07.2025 end
 
     // 30.07.2025 begin
