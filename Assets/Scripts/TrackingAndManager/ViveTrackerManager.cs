@@ -12,6 +12,11 @@ public class ViveTrackerManager : MonoBehaviour
     private string filePath;
     [SerializeField] public bool trackingEnabled; //Variable with field in inspector to enable tracking; default = false
 
+    // 08.08.2025 begin - Physics overlap config used to find grabbed collider names
+    [SerializeField] private LayerMask grabLayerMask = ~0; // default: everything; adjust in Inspector to limit searchable layers
+    [SerializeField] private QueryTriggerInteraction queryTriggerInteraction = QueryTriggerInteraction.Collide;
+    // 08.08.2025 end
+
 
     // 30.07.2025 begin
     private long modelStartTime = -1;
@@ -117,8 +122,80 @@ public class ViveTrackerManager : MonoBehaviour
                 row += ",,,,,,,";
         }
         
-        // Add model_name column at the end
+        // 08.08.2025 begin - Simplify controller logging: only trigger_pressed, grip_pressed, and grabbed collider name per hand
+        // Step: Resolve left and right hand devices via XRNode to read controller-specific features we need (trigger, grip).
+        InputDevice leftController = default;
+        InputDevice rightController = default;
+        bool hasLeftController = false;
+        bool hasRightController = false;
+
+        {
+            var nodeDevices = new List<InputDevice>();
+            InputDevices.GetDevicesAtXRNode(XRNode.LeftHand, nodeDevices);
+            if (nodeDevices.Count > 0 && nodeDevices[0].isValid)
+            {
+                leftController = nodeDevices[0];
+                hasLeftController = true;
+            }
+        }
+
+        {
+            var nodeDevices = new List<InputDevice>();
+            InputDevices.GetDevicesAtXRNode(XRNode.RightHand, nodeDevices);
+            if (nodeDevices.Count > 0 && nodeDevices[0].isValid)
+            {
+                rightController = nodeDevices[0];
+                hasRightController = true;
+            }
+        }
+
+        // Step: For each hand, try to read trigger/grip states and infer grabbed collider name when gripping.
+        if (hasLeftController)
+        {
+            leftController.TryGetFeatureValue(CommonUsages.triggerButton, out bool lTrig);
+            leftController.TryGetFeatureValue(CommonUsages.gripButton, out bool lGrip);
+            // Step: Estimate grabbed collider name using a small physics overlap sphere around controller position when grip is pressed.
+            string lGrabbed = "None";
+            if (lGrip)
+            {
+                if (leftController.TryGetFeatureValue(CommonUsages.devicePosition, out Vector3 lPos))
+                {
+                    lGrabbed = GetNearestColliderName(lPos, 0.075f);
+                }
+            }
+
+            row += $",{lTrig},{lGrip},{lGrabbed}";
+        }
+        else
+        {
+            // Step: If left controller missing, append empty CSV fields for all left-hand features (3 fields)
+            row += ",,,";
+        }
+
+        if (hasRightController)
+        {
+            rightController.TryGetFeatureValue(CommonUsages.triggerButton, out bool rTrig);
+            rightController.TryGetFeatureValue(CommonUsages.gripButton, out bool rGrip);
+            string rGrabbed = "None";
+            if (rGrip)
+            {
+                if (rightController.TryGetFeatureValue(CommonUsages.devicePosition, out Vector3 rPos))
+                {
+                    rGrabbed = GetNearestColliderName(rPos, 0.075f);
+                }
+            }
+
+            row += $",{rTrig},{rGrip},{rGrabbed}";
+        }
+        else
+        {
+            // Step: If right controller missing, append empty CSV fields for all right-hand features (3 fields)
+            row += ",,,";
+        }
+
+        // Step: Finally, add model_name column at the end
         row += $",{modelName}";
+        // 08.08.2025 end - Simplify controller logging
 
         writer.WriteLine(row);
         writer.Flush();
@@ -190,15 +267,17 @@ public class ViveTrackerManager : MonoBehaviour
         if (!fileExists)
         {
             // Write header only if file is new
+            // 08.08.2025 begin - Reduce header to only trigger/grip and grabbed names per hand
             writer.WriteLine("raw_timestamp,relative_to_unix_epoch_timestamp," +
                 "RightFoot_pos_x,RightFoot_pos_y,RightFoot_pos_z,RightFoot_rot_x,RightFoot_rot_y,RightFoot_rot_z,RightFoot_rot_w," +
                 "LeftFoot_pos_x,LeftFoot_pos_y,LeftFoot_pos_z,LeftFoot_rot_x,LeftFoot_rot_y,LeftFoot_rot_z,LeftFoot_rot_w," +
                 "Waist_pos_x,Waist_pos_y,Waist_pos_z,Waist_rot_x,Waist_rot_y,Waist_rot_z,Waist_rot_w," +
                 "LeftHand_pos_x,LeftHand_pos_y,LeftHand_pos_z,LeftHand_rot_x,LeftHand_rot_y,LeftHand_rot_z,LeftHand_rot_w," +
                 "RightHand_pos_x,RightHand_pos_y,RightHand_pos_z,RightHand_rot_x,RightHand_rot_y,RightHand_rot_z,RightHand_rot_w," +
-                // 30.07.2025 begin
+                "LeftHand_trigger_pressed,LeftHand_grip_pressed,LeftHand_grabbed_name," +
+                "RightHand_trigger_pressed,RightHand_grip_pressed,RightHand_grabbed_name," +
                 "model_name");
-                // 30.07.2025 end
+            // 08.08.2025 end - Reduce header to only trigger/grip and grabbed names per hand
         }
 
         logging = true;
@@ -229,6 +308,30 @@ public class ViveTrackerManager : MonoBehaviour
         StopLogging();
     }
    
+    // 08.08.2025 begin - Helper to find nearest collider name around a position (for grabbed object inference)
+    private string GetNearestColliderName(Vector3 position, float radius)
+    {
+        Collider[] hits = Physics.OverlapSphere(position, radius, grabLayerMask, queryTriggerInteraction);
+        if (hits == null || hits.Length == 0)
+        {
+            return "None";
+        }
+
+        float bestDistSq = float.MaxValue;
+        string bestName = hits[0].name;
+        for (int i = 0; i < hits.Length; i++)
+        {
+            float dSq = (hits[i].ClosestPoint(position) - position).sqrMagnitude;
+            if (dSq < bestDistSq)
+            {
+                bestDistSq = dSq;
+                bestName = hits[i].name;
+            }
+        }
+        return bestName;
+    }
+    // 08.08.2025 end
+
     // 30.07.2025 begin
     public void RecordModelBuildStart()
     {
