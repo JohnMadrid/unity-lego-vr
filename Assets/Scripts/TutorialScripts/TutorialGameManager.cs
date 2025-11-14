@@ -530,7 +530,7 @@ public class TutorialGameManager : MonoBehaviour
                     {
                         gazeScript.enabled = true;
                         // 08.08.2025 Start: Set the layer mask to the correct value for these conditions.
-                        gazeScript.gazeLayerMask = LayerMask.GetMask("GazeInteractable");
+                        gazeScript.gazeLayerMask = LayerMask.GetMask("Everything");
                         Debug.Log("TutorialGameManager: Training Model spawned in Condition 2/3. GazeActivatable script ENABLED and LayerMask set to 'GazeInteractable'.");
                         // 08.08.2025 End
                     }
