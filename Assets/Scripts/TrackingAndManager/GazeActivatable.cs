@@ -33,7 +33,8 @@ public class GazeActivatable : MonoBehaviour
 
     // === Trial 3 state ===
     //private bool hasBeenActivated = false;  // Whether the object has been triggered
-    private bool isVisible = false;  
+    public bool isVisible = false;  
+    public bool IsVisible => isVisible;
 
     // 07.08.2025 Start
     void Start()
