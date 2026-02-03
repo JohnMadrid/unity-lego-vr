@@ -57,8 +57,8 @@ public class EyeTrackingManager : MonoBehaviour
     // Calibration tracking variables
     private enum CalibrationState { Idle, Requesting, WaitingForUser, CheckingQuality, Succeeded }
     private CalibrationState calibrationState = CalibrationState.Idle;
-    private int calibrationAttempts = 0;
-    private int totalCalibrationAttempts = 0; // Total across all sessions
+    private int calibrationAttempts = 0; // Attempts within the current calibration session
+    private int totalCalibrationAttempts = 0; // Total across all calibration sessions
     private bool calibrationCompleted = false;
     private string leftEyeCalibrationQuality = "Unknown";
     private string rightEyeCalibrationQuality = "Unknown";
@@ -103,6 +103,10 @@ public class EyeTrackingManager : MonoBehaviour
                 case CalibrationState.Requesting:
                     // Attempt to request calibration from the Varjo system.
                     Debug.Log($"[CALIBRATION] Attempt {calibrationAttempts + 1}: Requesting calibration.");
+                    // 02.02.2026 begin increase calibration attempts and total calibration attempts
+                    calibrationAttempts++; 
+                    totalCalibrationAttempts++;
+                    // 02.02.2026 end
                     if (VarjoEyeTracking.RequestGazeCalibration())
                     {
                         Debug.Log("[CALIBRATION] Request successful. Waiting for user to finish on-screen prompts.");
@@ -161,7 +165,9 @@ public class EyeTrackingManager : MonoBehaviour
     private void StartCalibrationProcess()
     {
         calibrationAttempts = 0;
-        totalCalibrationAttempts++;
+        // 02.02.2026 removed totalCalibrationAttempts++; since increment in VarjoEyeTracking.RequestGazeCalibration()
+        //totalCalibrationAttempts++;
+        // 02.02.2026 end
         calibrationCompleted = false;
         calibrationState = CalibrationState.Requesting;
         calibrationStartTime = Time.time;
@@ -173,7 +179,9 @@ public class EyeTrackingManager : MonoBehaviour
     private System.Collections.IEnumerator RetryCalibration(string reason)
     {
         calibrationState = CalibrationState.Idle; // Pause state machine
-        calibrationAttempts++;
+        // 02.02.2026 begin remove increase calibration attempts since increment in VarjoEyeTracking.RequestGazeCalibration()
+        //calibrationAttempts++;
+        // 02.02.2026 end
         Debug.Log($"[CALIBRATION] Retrying due to: {reason}. Waiting {calibrationRetryDelay}s.");
         yield return new WaitForSeconds(calibrationRetryDelay);
         calibrationState = CalibrationState.Requesting; // Restart the process
