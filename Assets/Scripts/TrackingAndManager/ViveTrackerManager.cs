@@ -14,15 +14,18 @@ public class ViveTrackerManager : MonoBehaviour
 
     private GameManager gameManager;
 
-    // --- NEW: Foot area colliders ---
-    [Header("Foot Area Colliders")]
-    [SerializeField] private Collider modelArea;
-    [SerializeField] private Collider resourceArea;
-    [SerializeField] private Collider workArea;
+    // --- Foot area settings ---
+    [Header("Foot Area Settings")]
+    [SerializeField] private Transform areaColliderRoot; // Assign the AreaCollider GameObject here
+    [SerializeField] private float areaCheckRadius = 0.05f;
 
-    // --- NEW: Logged area names ---
-    private string leftFootArea = "None";
-    private string rightFootArea = "None";
+    // --- Logged area names ---
+    // Default starting area for both feet is Work
+    private string leftFootArea = "Work";
+    private string rightFootArea = "Work";
+
+    // Name â†’ area mapping for AreaCollider children
+    private Dictionary<string, string> areaByColliderName;
 
     // Cached model info
     private long modelStartTime = -1;
@@ -30,17 +33,39 @@ public class ViveTrackerManager : MonoBehaviour
     private bool isBuildingModel = false;
     private string modelName = "";
 
+    // Cumulative rotation (in degrees) for the currently active model,
+    // mirrored from ModelRotation.CurrentRotationDegrees for logging.
+    public float model_rot_deg { get; private set; } = 0f;
+
     private string participantCode;
 
     void Start()
     {
         Debug.Log("Initializing Body Tracking...");
         gameManager = FindObjectOfType<GameManager>();
+
+        // Initialize mapping from collider names under AreaCollider to logical area labels
+        areaByColliderName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "DeathZoneR", "Middle" },
+            { "DeathZoneM", "Middle" },
+            { "DeathZoneW", "Middle" },
+            { "WorkBack", "Work" },
+            { "WorkLeft", "Work" },
+            { "WorkRight", "Work" },
+            { "ResourceBack", "Resource" },
+            { "ResourceFront", "Resource" },
+            { "ModelBack", "Model" },
+            { "ModelFront", "Model" }
+        };
     }
 
     void Update()
     {
         if (!logging) return;
+
+        // Track if the active model changed this frame, so we can reset rotation tracking.
+        string previousModelName = modelName;
 
         // --- Determine current model name ---
         Transform modelSpawnPoint = null;
@@ -60,6 +85,16 @@ public class ViveTrackerManager : MonoBehaviour
         else
             modelName = "None";
 
+        // If a new model appeared (or the current one disappeared), reset rotation tracking.
+        if (!string.Equals(modelName, previousModelName, StringComparison.Ordinal))
+        {
+            model_rot_deg = 0f;
+            ModelRotation.ResetRotationTracking();
+        }
+
+        // Mirror the current rotation amount from ModelRotation for logging and inspection.
+        model_rot_deg = ModelRotation.CurrentRotationDegrees;
+
         long rawTimestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         float relativeTimestamp = Time.time;
 
@@ -73,6 +108,8 @@ public class ViveTrackerManager : MonoBehaviour
 
         Vector3 leftFootPos = Vector3.zero;
         Vector3 rightFootPos = Vector3.zero;
+        bool hasLeftFoot = false;
+        bool hasRightFoot = false;
 
         foreach (var device in devices)
         {
@@ -90,15 +127,24 @@ public class ViveTrackerManager : MonoBehaviour
 
             // --- Detect foot tracker positions for area classification ---
             if (key.Contains("Right_Foot"))
+            {
                 rightFootPos = position;
+                hasRightFoot = true;
+            }
 
             if (key.Contains("Left_Foot"))
+            {
                 leftFootPos = position;
+                hasLeftFoot = true;
+            }
         }
 
-        // --- NEW: Determine foot areas ---
-        leftFootArea = GetAreaForFoot(leftFootPos);
-        rightFootArea = GetAreaForFoot(rightFootPos);
+        // --- Determine / update foot areas based on AreaCollider children ---
+        if (hasLeftFoot)
+            leftFootArea = UpdateFootArea(leftFootPos, leftFootArea);
+
+        if (hasRightFoot)
+            rightFootArea = UpdateFootArea(rightFootPos, rightFootArea);
 
         // --- Build CSV row ---
         string row = $"{rawTimestamp},{relativeTimestamp}";
@@ -200,31 +246,50 @@ public class ViveTrackerManager : MonoBehaviour
             $"{rGrabPos.x},{rGrabPos.y},{rGrabPos.z}," +
             $"{rGrabRot.x},{rGrabRot.y},{rGrabRot.z},{rGrabRot.w}," +
             $"{modelName}," +
+            $"{model_rot_deg}," +
             $"{leftFootArea},{rightFootArea}";
 
         writer.WriteLine(row);
         writer.Flush();
     }
 
-    // --- NEW: Determine which area a foot is in ---
-    private string GetAreaForFoot(Vector3 footPos)
+    // --- Determine / update which area a foot is in based on AreaCollider children ---
+    private string UpdateFootArea(Vector3 footPos, string currentArea)
     {
-        if (modelArea != null && IsInside(modelArea, footPos))
-            return "ModelArea";
+        string newArea = GetAreaFromColliders(footPos);
+        if (!string.IsNullOrEmpty(newArea))
+            return newArea;
 
-        if (resourceArea != null && IsInside(resourceArea, footPos))
-            return "ResourceArea";
-
-        if (workArea != null && IsInside(workArea, footPos))
-            return "WorkArea";
-
-        return "None";
+        // No new area detected this frame â€“ preserve previous area (persistence requirement)
+        return currentArea;
     }
 
-    private bool IsInside(Collider col, Vector3 point)
+    private string GetAreaFromColliders(Vector3 footPos)
     {
-        Vector3 closest = col.ClosestPoint(point);
-        return Vector3.Distance(closest, point) < 0.001f;
+        if (areaColliderRoot == null || areaByColliderName == null || areaByColliderName.Count == 0)
+            return null;
+
+        // Guard against uninitialized or invalid positions
+        if (float.IsNaN(footPos.x) || float.IsNaN(footPos.y) || float.IsNaN(footPos.z))
+            return null;
+
+        Collider[] hits = Physics.OverlapSphere(footPos, areaCheckRadius);
+        if (hits == null || hits.Length == 0)
+            return null;
+
+        foreach (var hit in hits)
+        {
+            if (hit == null) continue;
+
+            Transform t = hit.transform;
+            if (!t.IsChildOf(areaColliderRoot)) continue; // Ignore anything not under AreaCollider
+
+            string colliderName = t.gameObject.name;
+            if (areaByColliderName.TryGetValue(colliderName, out string area))
+                return area;
+        }
+
+        return null;
     }
 
     // --- Logging control ---
@@ -280,8 +345,8 @@ public class ViveTrackerManager : MonoBehaviour
                 "LeftGrab_obj_rot_x,LeftGrab_obj_rot_y,LeftGrab_obj_rot_z,LeftGrab_obj_rot_w," +
                 "RightGrab_obj_pos_x,RightGrab_obj_pos_y,RightGrab_obj_pos_z," +
                 "RightGrab_obj_rot_x,RightGrab_obj_rot_y,RightGrab_obj_rot_z,RightGrab_obj_rot_w," +
-                "model_name," +
-                "left_foot_area,right_foot_area"
+                "model_name,model_rot_deg," +
+                "LeftFootArea,RightFootArea"
             );
         }
 

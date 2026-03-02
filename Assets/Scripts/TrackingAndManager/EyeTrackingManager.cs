@@ -224,7 +224,7 @@ public class EyeTrackingManager : MonoBehaviour
 
             Vector3 hmdPosition = xrCamera.transform.position;
             Quaternion hmdRotation = xrCamera.transform.rotation;
-            // Name derived from ray hit (stud -> parent brick normalization handled below)
+            // Name derived directly from the hit collider (stud names logged as-is)
             string hitObjectName = "None";
             // Compute condition and trial numbers
             int conditionNumber = (gameManager != null) ? gameManager.trialNumber : 0; // if gameManager not found (are in Tutorial Scene) therefore, 0. Because Tutorial Scene has Tutorialmanager
@@ -588,27 +588,12 @@ public class EyeTrackingManager : MonoBehaviour
          return null;
      }
  
-     private string GetLoggedObjectName(Transform hitTransform, GazeActivatable activatable)
-     {
-         if (hitTransform == null) return "None";
- 
-         string rawName = hitTransform.gameObject.name;
-         if (NameContains(rawName, "stud"))
-         {
-             // Prefer a parent with 'brick' in the name
-             Transform brickAncestor = FindAncestorWithNameContaining(hitTransform, "brick");
-             if (brickAncestor != null) return brickAncestor.name;
- 
-             // Otherwise, fallback to first non-stud ancestor
-             Transform nonStud = FindFirstNonStudAncestor(hitTransform);
-             if (nonStud != null) return nonStud.name;
- 
-             // Last resort: use the model root (GazeActivatable) name if available
-             if (activatable != null) return activatable.gameObject.name;
-         }
- 
-         // Not a stud: keep original
-         return rawName;
-     }
+    private string GetLoggedObjectName(Transform hitTransform, GazeActivatable activatable)
+    {
+        if (hitTransform == null) return "None";
+
+        // Always log the exact collider name that was hit (stud or non-stud)
+        return hitTransform.gameObject.name;
+    }
      // === End helpers ===
 }

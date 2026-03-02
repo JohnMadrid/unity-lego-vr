@@ -58,7 +58,13 @@ public class ParticipantInputManager : MonoBehaviour
         {
             viveTrackerManager.StartLoggingManually();
         }
-        
+
+        // Brick relation tracking (snap events between bricks/board)
+        var bricksRelationTracker = FindObjectOfType<BricksRelationTracker>();
+        if (bricksRelationTracker != null && bricksRelationTracker.trackingEnabled)
+        {
+            bricksRelationTracker.StartLoggingManually();
+        }
 
     }
 }
