@@ -51,11 +51,14 @@ public class EyeTrackingManager : MonoBehaviour
     private string participantCode; // Default value, will be set in Start()
     // 30.07.2025 end
 
+     // Cached references
+     private GameManager gameManager;
+ 
     // Calibration tracking variables
     private enum CalibrationState { Idle, Requesting, WaitingForUser, CheckingQuality, Succeeded }
     private CalibrationState calibrationState = CalibrationState.Idle;
-    private int calibrationAttempts = 0;
-    private int totalCalibrationAttempts = 0; // Total across all sessions
+    private int calibrationAttempts = 0; // Attempts within the current calibration session
+    private int totalCalibrationAttempts = 0; // Total across all calibration sessions
     private bool calibrationCompleted = false;
     private string leftEyeCalibrationQuality = "Unknown";
     private string rightEyeCalibrationQuality = "Unknown";
@@ -65,7 +68,7 @@ public class EyeTrackingManager : MonoBehaviour
     // Calibration quality thresholds
     private readonly string[] acceptableQualities = { "Medium", "High" };
     private const float calibrationRetryDelay = 3.0f; // Delay between calibration attempts
-    
+
     /// <summary>
     /// Initializes eye tracking system, calibrates the headset, and starts logging if enabled.
     /// </summary>
@@ -73,6 +76,9 @@ public class EyeTrackingManager : MonoBehaviour
     {
         Debug.Log("Initializing Eye Tracking...");
 
+         // Cache GameManager reference for condition and trial access
+         gameManager = FindObjectOfType<GameManager>();
+ 
         // Debug gaze data structure only if debug mode is enabled
         if (enableDebugMode)
         {
@@ -97,6 +103,10 @@ public class EyeTrackingManager : MonoBehaviour
                 case CalibrationState.Requesting:
                     // Attempt to request calibration from the Varjo system.
                     Debug.Log($"[CALIBRATION] Attempt {calibrationAttempts + 1}: Requesting calibration.");
+                    // 02.02.2026 begin increase calibration attempts and total calibration attempts
+                    calibrationAttempts++; 
+                    totalCalibrationAttempts++;
+                    // 02.02.2026 end
                     if (VarjoEyeTracking.RequestGazeCalibration())
                     {
                         Debug.Log("[CALIBRATION] Request successful. Waiting for user to finish on-screen prompts.");
@@ -155,7 +165,9 @@ public class EyeTrackingManager : MonoBehaviour
     private void StartCalibrationProcess()
     {
         calibrationAttempts = 0;
-        totalCalibrationAttempts++;
+        // 02.02.2026 removed totalCalibrationAttempts++; since increment in VarjoEyeTracking.RequestGazeCalibration()
+        //totalCalibrationAttempts++;
+        // 02.02.2026 end
         calibrationCompleted = false;
         calibrationState = CalibrationState.Requesting;
         calibrationStartTime = Time.time;
@@ -167,7 +179,9 @@ public class EyeTrackingManager : MonoBehaviour
     private System.Collections.IEnumerator RetryCalibration(string reason)
     {
         calibrationState = CalibrationState.Idle; // Pause state machine
-        calibrationAttempts++;
+        // 02.02.2026 begin remove increase calibration attempts since increment in VarjoEyeTracking.RequestGazeCalibration()
+        //calibrationAttempts++;
+        // 02.02.2026 end
         Debug.Log($"[CALIBRATION] Retrying due to: {reason}. Waiting {calibrationRetryDelay}s.");
         yield return new WaitForSeconds(calibrationRetryDelay);
         calibrationState = CalibrationState.Requesting; // Restart the process
@@ -210,7 +224,19 @@ public class EyeTrackingManager : MonoBehaviour
 
             Vector3 hmdPosition = xrCamera.transform.position;
             Quaternion hmdRotation = xrCamera.transform.rotation;
-            string hitObjectName = DetectGazeHitObject(gazeData);
+            // Name derived directly from the hit collider (stud names logged as-is)
+            string hitObjectName = "None";
+            // Compute condition and trial numbers
+            int conditionNumber = (gameManager != null) ? gameManager.trialNumber : 0; // if gameManager not found (are in Tutorial Scene) therefore, 0. Because Tutorial Scene has Tutorialmanager
+            int trialNumber = (gameManager != null) ? Mathf.Clamp(gameManager.GetCurrentItemIndex(), 0, 6) : 0; // see above
+            // Try to get detailed hit info
+            Transform hitTransform;
+            GazeActivatable activatable;
+            bool hasHit = TryGetGazeHit(gazeData, out hitTransform, out activatable);
+            int modelVisibilityState = (hasHit && activatable != null && activatable.IsVisible) ? 1 : 0;
+            Vector3 objPos = hasHit ? hitTransform.position : Vector3.zero;
+            Quaternion objRot = hasHit ? hitTransform.rotation : Quaternion.identity;
+            hitObjectName = GetLoggedObjectName(hitTransform, activatable);
 
             string csvEntry =
                 $"{gazeData.captureTime},{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()},{Time.time},{gazeData.focusDistance},{gazeData.frameNumber},{gazeData.focusStability},{gazeData.status}," +
@@ -226,7 +252,10 @@ public class EyeTrackingManager : MonoBehaviour
                 $"{hmdPosition.x},{hmdPosition.y},{hmdPosition.z}," +
                 $"{hmdRotation.x},{hmdRotation.y},{hmdRotation.z},{hmdRotation.w}," +
                 $"{currentModelName},{isBuildingModel},{hitObjectName}," +
-                $"{calibrationState},{calibrationAttempts},{leftEyeCalibrationQuality},{rightEyeCalibrationQuality}";
+                 $"{calibrationState},{calibrationAttempts},{leftEyeCalibrationQuality},{rightEyeCalibrationQuality}," +
+                 $"{conditionNumber},{trialNumber},{modelVisibilityState}," +
+                 $"{objPos.x},{objPos.y},{objPos.z}," +
+                 $"{objRot.x},{objRot.y},{objRot.z},{objRot.w}";
 
             writer.WriteLine(csvEntry);
         }
@@ -376,7 +405,10 @@ public class EyeTrackingManager : MonoBehaviour
                             "hmd_position_x,hmd_position_y,hmd_position_z," +
                             "hmd_rotation_x,hmd_rotation_y,hmd_rotation_z,hmd_rotation_w," +
                             "model_name,is_building_model,hit_obj_name," +
-                            "calibration_state,calibration_attempts,left_eye_calibration_quality,right_eye_calibration_quality");
+                             "calibration_state,calibration_attempts,left_eye_calibration_quality,right_eye_calibration_quality," +
+                             "condition_number,trial_number,model_visibility_state," +
+                             "object_position_x,object_position_y,object_position_z," +
+                             "object_rotation_x,object_rotation_y,object_rotation_z,object_rotation_w");
         }
 
         logging = true;
@@ -502,4 +534,66 @@ public class EyeTrackingManager : MonoBehaviour
         return "None";
     }
     // 30.07.2025 end
+
+     /// <summary>
+     /// Raycasts from the gaze to get the hit Transform and associated GazeActivatable, if any.
+     /// </summary>
+     private bool TryGetGazeHit(VarjoEyeTracking.GazeData gazeData, out Transform hitTransform, out GazeActivatable activatable)
+     {
+         hitTransform = null;
+         activatable = null;
+ 
+         Vector3 rayOrigin = xrCamera.transform.position + xrCamera.transform.rotation * gazeData.gaze.origin;
+         Vector3 rayDirection = xrCamera.transform.rotation * gazeData.gaze.forward;
+         float maxDistance = 10f;
+ 
+         if (Physics.Raycast(rayOrigin, rayDirection, out RaycastHit hit, maxDistance))
+         {
+             hitTransform = hit.collider.transform;
+             activatable = hitTransform.GetComponentInParent<GazeActivatable>();
+             return true;
+         }
+         return false;
+     }
+     // 30.07.2025 add hit info method end
+
+     // === Hit object name normalization helpers ===
+     private static bool NameContains(string value, string term)
+     {
+         return !string.IsNullOrEmpty(value) &&
+                value.IndexOf(term, StringComparison.OrdinalIgnoreCase) >= 0;
+     }
+ 
+     private static Transform FindAncestorWithNameContaining(Transform start, string term, int maxDepth = 10)
+     {
+         int depth = 0;
+         Transform current = start;
+         while (current != null && depth++ < maxDepth)
+         {
+             if (NameContains(current.name, term)) return current;
+             current = current.parent;
+         }
+         return null;
+     }
+ 
+     private static Transform FindFirstNonStudAncestor(Transform start, int maxDepth = 10)
+     {
+         int depth = 0;
+         Transform current = start;
+         while (current != null && depth++ < maxDepth)
+         {
+             if (!NameContains(current.name, "stud")) return current;
+             current = current.parent;
+         }
+         return null;
+     }
+ 
+    private string GetLoggedObjectName(Transform hitTransform, GazeActivatable activatable)
+    {
+        if (hitTransform == null) return "None";
+
+        // Always log the exact collider name that was hit (stud or non-stud)
+        return hitTransform.gameObject.name;
+    }
+     // === End helpers ===
 }

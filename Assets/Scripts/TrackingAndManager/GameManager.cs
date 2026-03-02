@@ -52,7 +52,7 @@ public class GameManager : MonoBehaviour
     // 05.08.2025 begin
     public bool iQuestionsTracking = true; // Flag to enable/disable I-Questions tracking
     // 05.08.2025 end
-    public int trialNumber; // Current trial number
+    public int trialNumber; // Current condition number
     private string csvPathQ1; // change this
     private string csvPathQ2; // change this
     private string csvPathQ3; // change this
@@ -158,8 +158,13 @@ public class GameManager : MonoBehaviour
         {
             viveTrackerManager.StartLoggingManually();
         }
-        
 
+        // Brick relation tracking (snap events between bricks/board)
+        var bricksRelationTracker = FindObjectOfType<BricksRelationTracker>();
+        if (bricksRelationTracker != null && bricksRelationTracker.trackingEnabled)
+        {
+            bricksRelationTracker.StartLoggingManually();
+        }
     }
 
     // function is triggered by the NextItembutton in the scene. it is initially enabled

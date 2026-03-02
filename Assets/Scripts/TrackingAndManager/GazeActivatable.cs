@@ -28,12 +28,16 @@ public class GazeActivatable : MonoBehaviour
     private Renderer[] objectRenderers;
     // 07.08.2025 End
 
+    // Colliders within this prefab that should respond to gaze (bricks, studs, model_plate, etc.).
+    private Collider[] activationColliders;
+
     private bool isHovering = false;
     private Coroutine delayCoroutine = null;
 
     // === Trial 3 state ===
     //private bool hasBeenActivated = false;  // Whether the object has been triggered
-    private bool isVisible = false;  
+    public bool isVisible = false;  
+    public bool IsVisible => isVisible;
 
     // 07.08.2025 Start
     void Start()
@@ -63,6 +67,18 @@ public class GazeActivatable : MonoBehaviour
             return; // Stop the script if there's nothing to control.
         }
 
+        // Gather all colliders on this prefab to be used for gaze activation.
+        // This automatically includes brick, top stud, and model_plate colliders.
+        activationColliders = GetComponentsInChildren<Collider>(true);
+        if (activationColliders == null || activationColliders.Length == 0)
+        {
+            if (enableDebugMode) Debug.LogWarning("GazeActivatable: No colliders found in children for gaze activation.", gameObject);
+        }
+        else if (enableDebugMode)
+        {
+            Debug.Log($"GazeActivatable: Found {activationColliders.Length} activation colliders in prefab.", gameObject);
+        }
+
         // Get the active scene's build index to determine the condition.
         int sceneIndex = SceneManager.GetActiveScene().buildIndex;
         conditionNumber = sceneIndex;
@@ -88,9 +104,9 @@ public class GazeActivatable : MonoBehaviour
             if (enableDebugMode) Debug.Log($"GazeActivatable: Raycast hit '{hit.collider.name}'.", gameObject);
             
             // 07.08.2025 Start
-            // Step 5 (Logic): Check if the gazed object (or its parent) has this script component.
-            // This robustly identifies the correct model, even if the collider is on a child object like 'Model_plate'.
-            if (hit.collider.GetComponentInParent<GazeActivatable>() == this)
+            // Step 5 (Logic): Check if the gazed collider belongs to this model's prefab.
+            // This uses the activationColliders array gathered from all children (bricks, studs, model_plate, etc.).
+            if (IsHitFromThisModel(hit.collider))
             {
             // 07.08.2025 End
                 if (!isHovering)
@@ -174,6 +190,36 @@ public class GazeActivatable : MonoBehaviour
     }
 
     // === Utility Methods ===
+
+    /// <summary>
+    /// Determines whether the raycast hit collider belongs to this model's activation colliders.
+    /// Falls back to the old hierarchy-based detection if activationColliders is not initialized.
+    /// </summary>
+    /// <param name="hitCollider">Collider hit by the gaze raycast.</param>
+    /// <returns>True if the collider should activate this GazeActivatable instance.</returns>
+    private bool IsHitFromThisModel(Collider hitCollider)
+    {
+        if (hitCollider == null)
+            return false;
+
+        // Preferred path: use the explicit list of colliders gathered from this prefab.
+        if (activationColliders != null && activationColliders.Length > 0)
+        {
+            for (int i = 0; i < activationColliders.Length; i++)
+            {
+                if (activationColliders[i] == hitCollider)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        // Fallback for backward compatibility: rely on hierarchy-based detection.
+        return hitCollider.GetComponentInParent<GazeActivatable>() == this;
+    }
+
 
     // 07.08.2025 Start
     // Step 4: Control all bricks together. This function now loops through the array.
