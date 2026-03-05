@@ -608,11 +608,23 @@ public class TutorialGameManager : MonoBehaviour
         PlayerPrefs.Save();
         Debug.Log($"TutorialGameManager: Scene transition - Saved participant code to PlayerPrefs: '{participantCode}'");
 
-        int currentSceneIndex = SceneManager.GetActiveScene().buildIndex;
+        // Read the selected condition from PlayerPrefs (default to 1 if not set).
+        int selectedCondition = PlayerPrefs.GetInt("SelectedCondition", 1);
+        selectedCondition = Mathf.Clamp(selectedCondition, 1, 3);
 
-        if (currentSceneIndex + 1 < SceneManager.sceneCountInBuildSettings)
-            SceneManager.LoadScene(currentSceneIndex + 1);
+        // With your current Build Settings, build index 0 is TutorialVideo,
+        // and indices 1–3 are the three condition scenes. This maps
+        // condition 1→build index 1, 2→2, 3→3.
+        int targetBuildIndex = selectedCondition;
+
+        if (targetBuildIndex < SceneManager.sceneCountInBuildSettings)
+        {
+            Debug.Log($"TutorialGameManager: Loading condition {selectedCondition} at build index {targetBuildIndex}");
+            SceneManager.LoadScene(targetBuildIndex);
+        }
         else
-            Debug.Log("All levels complete!");
+        {
+            Debug.LogError($"TutorialGameManager: Target build index {targetBuildIndex} is out of range. Check Build Settings.");
+        }
     }
 }
