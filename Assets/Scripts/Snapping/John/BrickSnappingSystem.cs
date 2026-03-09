@@ -193,7 +193,23 @@ public class BrickSnappingSystem
         brick.LogDebug($"RequestSnap() - About to call CalculateSnapTransform", true);
         CalculateSnapTransform(myStud, targetStud, targetBrick, releasePosition, releaseRotation);
         brick.LogDebug($"RequestSnap() - CalculateSnapTransform completed", true);
-        
+
+        // --- Log snap event to BricksRelationTracker ---
+        var bricksRelationTracker = UnityEngine.Object.FindObjectOfType<BricksRelationTracker>();
+        if (bricksRelationTracker != null && bricksRelationTracker.trackingEnabled)
+        {
+            // Minimal implementation: log the main stud pair.
+            var snappedStuds = new List<Stud> { myStud };
+            var targetStuds = new List<Stud> { targetStud };
+
+            bricksRelationTracker.RecordSnapEvent(
+                snappedBrick: brick,
+                targetBrickOrBoard: targetBrick,
+                snappedStuds: snappedStuds,
+                targetStuds: targetStuds
+            );
+        }
+
         // Check if target brick rotation changed during calculation
         Vector3 finalTargetRotation = targetBrick.transform.rotation.eulerAngles;
         if (Vector3.Distance(initialTargetRotation, finalTargetRotation) > 0.1f)

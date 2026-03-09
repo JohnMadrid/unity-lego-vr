@@ -12,6 +12,7 @@ public class ParticipantInputManager : MonoBehaviour
     public GameObject trackingManager;
     public GameObject randomModelManager; // Reference to RandomModelManager
     public GameObject resumeButton;       // Reference to ResumeButton in the UI
+    public GameObject startExperimentButton; // Reference to the Start Experiment button in the UI
 
     // Stores the chosen condition (1 = Condition1Constant, 2 = Condition2Delay, 3 = Condition3Once).
     // This is set by UI controls in the TutorialVideo scene before starting the experiment.
@@ -23,6 +24,12 @@ public class ParticipantInputManager : MonoBehaviour
     private void Start()
     {
         InitializeResumeUI();
+
+        // By default, hide the Start Experiment button until a condition is chosen manually.
+        if (startExperimentButton != null)
+        {
+            startExperimentButton.SetActive(false);
+        }
     }
 
     /// <summary>
@@ -36,6 +43,12 @@ public class ParticipantInputManager : MonoBehaviour
         PlayerPrefs.Save();
 
         Debug.Log($"ParticipantInputManager: Selected condition set to {selectedCondition}");
+
+        // Once a condition has been selected manually, show the Start Experiment button.
+        if (startExperimentButton != null)
+        {
+            startExperimentButton.SetActive(true);
+        }
     }
 
     public void StartExperiment()

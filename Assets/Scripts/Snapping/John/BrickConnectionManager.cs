@@ -245,6 +245,22 @@ public class BrickConnectionManager
         otherBrick.RemoveNeighbor(brick);
         brick.LogDebug($"UnsnapFrom() - Removed this brick from {otherBrick.name}'s neighbors");
 
+        // --- Log unsnap event to BricksRelationTracker ---
+        var bricksRelationTracker = UnityEngine.Object.FindObjectOfType<BricksRelationTracker>();
+        if (bricksRelationTracker != null && bricksRelationTracker.trackingEnabled)
+        {
+            var snappedStuds = new List<Stud>(); // Optional: populate from connection data in future
+            var targetStuds = new List<Stud>();
+
+            bricksRelationTracker.RecordSnapEvent(
+                snappedBrick: brick,
+                targetBrickOrBoard: otherBrick,
+                snappedStuds: snappedStuds,
+                targetStuds: targetStuds,
+                snapEventType: "unsnap"
+            );
+        }
+
         // Restore physics for this brick ONLY if it's not currently grabbed AND is not a board
         if (!brick.IsBoard && !brick.IsGrabbed)
         {
