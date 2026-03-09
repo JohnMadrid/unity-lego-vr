@@ -22,6 +22,10 @@ public class GazeActivatable : MonoBehaviour
     //[Header("Trial 3 Visibility Duration")]
     //public float visibilityDuration = 10f; // New: How long the object stays visible in Trial 3
 
+    [Header("Saccade Settings")]
+    [Tooltip("Maximum time (seconds) between gazes that is still treated as one continuous look (saccade gap).")]
+    public float saccadeGapSeconds = 0.5f;
+
     public int conditionNumber;
     // 07.08.2025 Start
     // Step 1: Store an array of Renderers to hold all the brick meshes.
@@ -33,6 +37,7 @@ public class GazeActivatable : MonoBehaviour
 
     private bool isHovering = false;
     private Coroutine delayCoroutine = null;
+    private float lastGazeTime = -1f;
 
     // === Trial 3 state ===
     //private bool hasBeenActivated = false;  // Whether the object has been triggered
@@ -108,6 +113,9 @@ public class GazeActivatable : MonoBehaviour
             // This uses the activationColliders array gathered from all children (bricks, studs, model_plate, etc.).
             if (IsHitFromThisModel(hit.collider))
             {
+                // Update last gaze time whenever this model is currently looked at
+                lastGazeTime = Time.time;
+
             // 07.08.2025 End
                 if (!isHovering)
                 {
@@ -177,14 +185,26 @@ public class GazeActivatable : MonoBehaviour
                     break;
                     
                 case 2: // condition 2
-                    if (enableDebugMode) Debug.Log("GazeActivatable: Condition 2 - Hiding object immediately on gaze exit.", gameObject);
-                    HideObjectImmediate(); // Hide immediately when gaze is removed
+                    if (enableDebugMode) Debug.Log("GazeActivatable: Condition 2 - Gaze exited, will hide after saccade gap if no new gaze.", gameObject);
                     break;
 
                 case 3: // condition 3
-                    if (enableDebugMode) Debug.Log("GazeActivatable: Condition 3 - Hiding object immediately on gaze exit.", gameObject);
-                    HideObjectImmediate(); // Hide immediately when gaze is removed
+                    if (enableDebugMode) Debug.Log("GazeActivatable: Condition 3 - Gaze exited, will hide after saccade gap if no new gaze.", gameObject);
                     break;
+            }
+        }
+
+        // For conditions 2 and 3, hide only if enough time has passed since the last gaze (saccade-style timeout)
+        if ((conditionNumber == 2 || conditionNumber == 3) && isVisible && !isHovering)
+        {
+            if (lastGazeTime >= 0f)
+            {
+                float gap = Time.time - lastGazeTime;
+                if (gap > saccadeGapSeconds)
+                {
+                    if (enableDebugMode) Debug.Log($"GazeActivatable: Saccade gap exceeded ({gap:F3}s > {saccadeGapSeconds:F3}s). Hiding object.", gameObject);
+                    HideObjectImmediate();
+                }
             }
         }
     }

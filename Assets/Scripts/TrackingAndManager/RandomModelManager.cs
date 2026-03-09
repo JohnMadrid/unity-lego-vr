@@ -32,24 +32,36 @@ public class RandomModelManager : MonoBehaviour
     private int currentTrial = 0;
 
     // 30.07.2025 begin
-    private string participantCode; // Default value, will be set in Start()
+    private string participantCode; // Default value, will be set in Awake()
     // 30.07.2025 end
 
     void Awake()
     {
-        // 30.07.2025 begin
-        // Get the participant code from the TutorialGameManager
-        participantCode = GameObject.Find("TutorialGameManager")?.GetComponent<TutorialGameManager>()?.participantCode
-            ?? GameObject.Find("GameManager")?.GetComponent<GameManager>()?.participantCode
-            ?? "Unknown";
-        // 30.07.2025 end
-
         if (Instance == null)
         {
             Instance = this;
             DontDestroyOnLoad(gameObject);
-            InitializeModelGroups();
-            CreateTrials();
+
+            // 30.07.2025 begin
+            // Get the participant code from PlayerPrefs first, then fall back to managers.
+            participantCode = PlayerPrefs.GetString("ParticipantCode",
+                GameObject.Find("TutorialGameManager")?.GetComponent<TutorialGameManager>()?.participantCode
+                ?? GameObject.Find("GameManager")?.GetComponent<GameManager>()?.participantCode
+                ?? "Unknown");
+            // 30.07.2025 end
+
+            // First try to reuse an existing model-order CSV for this participant.
+            // If that fails, create a new randomized order and log it.
+            bool loadedFromExistingCsv = TryLoadTrialsFromExistingCsv(participantCode);
+
+            if (!loadedFromExistingCsv)
+            {
+                InitializeModelGroups();
+                CreateTrials();
+
+                // Log the complete model order for all conditions once, up front.
+                LogAllTrials(participantCode);
+            }
         }
         else
         {
@@ -81,6 +93,9 @@ public class RandomModelManager : MonoBehaviour
 
 		void CreateTrials()
 		{
+		    trialModels.Clear();
+		    trialResources.Clear();
+
 		    for (int trial = 0; trial < totalTrials; trial++)
 		    {
 		        List<(GameObject model, GameObject resource)> trialPairs = new();
@@ -160,18 +175,19 @@ public class RandomModelManager : MonoBehaviour
 
     public void AssignPrefabsToGameManager(GameManager gm)
     {
-        if (currentTrial >= trialModels.Count)
+        // Determine the condition number from the active scene name (e.g., "Condition2").
+        int conditionNumber = ParseTrialNumberFromScene();
+        int idx = conditionNumber - 1;
+
+        if (idx < 0 || idx >= trialModels.Count)
         {
-            Debug.LogWarning("All trials have been assigned.");
+            Debug.LogWarning($"RandomModelManager: No trial data available for condition {conditionNumber} (index {idx}).");
             return;
         }
 
-        gm.modelPrefabs = trialModels[currentTrial];
-        gm.resourceBrickPrefabs = trialResources[currentTrial];
-        gm.trialNumber = ParseTrialNumberFromScene();
-
-        LogTrialData(gm.modelPrefabs, gm.resourceBrickPrefabs, gm.trialNumber, participantCode); // 30.07.2025 instead of gm.participantCode only participantCode
-        currentTrial++;
+        gm.modelPrefabs = trialModels[idx];
+        gm.resourceBrickPrefabs = trialResources[idx];
+        gm.trialNumber = conditionNumber;
     }
 
     int ParseTrialNumberFromScene()
@@ -199,13 +215,188 @@ public class RandomModelManager : MonoBehaviour
         using StreamWriter writer = new StreamWriter(trialCsvPath, true);
 
         if (!fileExists)
-            writer.WriteLine("ParticipantCode,ConditionNumber,Order,ModelName,ResourceBrickName");
+            writer.WriteLine("ParticipantCode,ConditionNumber,Order,ModelName,ResourceBrickName,Completed");
 
         for (int i = 0; i < models.Length; i++)
         {
-            writer.WriteLine($"{participantCode},{trialNumber},{i},{models[i].name},{resources[i].name}");
+            writer.WriteLine($"{participantCode},{trialNumber},{i},{models[i].name},{resources[i].name},False");
         }
 
         Debug.Log($"Trial logged: {participantCode}, Condition {trialNumber} → {trialCsvPath}");
+    }
+
+    /// <summary>
+    /// Logs all trials (for all conditions) once when they are first created,
+    /// so that resume or post-hoc analysis can see the full order from the start.
+    /// </summary>
+    void LogAllTrials(string participantCode)
+    {
+        if (!saveTrialLogs) return;
+
+        for (int conditionNumber = 1; conditionNumber <= trialModels.Count; conditionNumber++)
+        {
+            int idx = conditionNumber - 1;
+            if (idx < 0 || idx >= trialModels.Count) continue;
+
+            LogTrialData(trialModels[idx], trialResources[idx], conditionNumber, participantCode);
+        }
+    }
+
+    /// <summary>
+    /// Attempts to load existing trial definitions from the latest
+    /// model-order CSV for the given participant. If successful,
+    /// populates trialModels/trialResources and sets trialCsvPath so
+    /// completion updates reuse the same file.
+    /// </summary>
+    private bool TryLoadTrialsFromExistingCsv(string participant)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(participant)) return false;
+            if (!Directory.Exists(logPath)) return false;
+
+            DirectoryInfo dirInfo = new DirectoryInfo(logPath);
+            // Look for any existing model order files for this participant.
+            FileInfo latestCsv = dirInfo
+                .GetFiles($"{participant}_ModelOrder_*.csv")
+                .OrderByDescending(f => f.LastWriteTime)
+                .FirstOrDefault();
+
+            if (latestCsv == null)
+            {
+                return false;
+            }
+
+            string[] lines = File.ReadAllLines(latestCsv.FullName);
+            if (lines.Length <= 1)
+            {
+                return false;
+            }
+
+            // Group rows by condition number.
+            var byCondition = new Dictionary<int, List<(int order, string modelName, string resourceName)>>();
+
+            for (int i = 1; i < lines.Length; i++)
+            {
+                if (string.IsNullOrWhiteSpace(lines[i])) continue;
+
+                string[] parts = lines[i].Split(',');
+                if (parts.Length < 5) continue;
+
+                if (!int.TryParse(parts[1], out int conditionNumber)) continue;
+                if (!int.TryParse(parts[2], out int order)) continue;
+
+                string modelName = parts[3].Trim();
+                string resourceName = parts[4].Trim();
+
+                if (!byCondition.TryGetValue(conditionNumber, out var list))
+                {
+                    list = new List<(int, string, string)>();
+                    byCondition[conditionNumber] = list;
+                }
+
+                list.Add((order, modelName, resourceName));
+            }
+
+            if (byCondition.Count == 0)
+            {
+                return false;
+            }
+
+            trialModels.Clear();
+            trialResources.Clear();
+
+            // Build trial arrays in ascending condition order.
+            foreach (int conditionNumber in byCondition.Keys.OrderBy(c => c))
+            {
+                var entries = byCondition[conditionNumber]
+                    .OrderBy(e => e.order)
+                    .ToList();
+
+                var models = new List<GameObject>();
+                var resources = new List<GameObject>();
+
+                foreach (var (order, modelName, resourceName) in entries)
+                {
+                    GameObject modelPrefab = allModelPrefabs.FirstOrDefault(go => go.name == modelName);
+                    GameObject resourcePrefab = allResourceBrickPrefabs.FirstOrDefault(go => go.name == resourceName);
+
+                    if (modelPrefab == null || resourcePrefab == null)
+                    {
+                        Debug.LogWarning($"RandomModelManager: Could not find prefabs for model '{modelName}' or resource '{resourceName}' when loading from CSV.");
+                        continue;
+                    }
+
+                    models.Add(modelPrefab);
+                    resources.Add(resourcePrefab);
+                }
+
+                if (models.Count > 0 && resources.Count == models.Count)
+                {
+                    trialModels.Add(models.ToArray());
+                    trialResources.Add(resources.ToArray());
+                }
+            }
+
+            if (trialModels.Count == 0)
+            {
+                return false;
+            }
+
+            // Reuse this CSV file for completion updates.
+            trialCsvPath = latestCsv.FullName;
+
+            Debug.Log($"RandomModelManager: Loaded existing model order from '{trialCsvPath}' for participant '{participant}'.");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"RandomModelManager: Failed to load existing trials from CSV. {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Marks a specific model (by order index) as completed in the model-order CSV.
+    /// </summary>
+    public void MarkModelCompleted(string participantCode, int conditionNumber, int orderIndex)
+    {
+        if (!saveTrialLogs) return;
+
+        try
+        {
+            // Ensure we know which CSV file to edit.
+            if (string.IsNullOrEmpty(trialCsvPath) || !File.Exists(trialCsvPath))
+            {
+                Debug.LogWarning("RandomModelManager: No trial CSV to mark completion in.");
+                return;
+            }
+
+            var lines = File.ReadAllLines(trialCsvPath).ToList();
+            if (lines.Count <= 1) return; // header only
+
+            // Header: ParticipantCode,ConditionNumber,Order,ModelName,ResourceBrickName,Completed
+            for (int i = 1; i < lines.Count; i++)
+            {
+                string[] parts = lines[i].Split(',');
+                if (parts.Length < 6) continue;
+
+                if (!int.TryParse(parts[1], out int cond)) continue;
+                if (!int.TryParse(parts[2], out int order)) continue;
+
+                if (parts[0] == participantCode && cond == conditionNumber && order == orderIndex)
+                {
+                    parts[5] = "True"; // mark as completed
+                    lines[i] = string.Join(",", parts);
+                    break;
+                }
+            }
+
+            File.WriteAllLines(trialCsvPath, lines);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"RandomModelManager: Failed to mark model completed. {ex.Message}");
+        }
     }
 }

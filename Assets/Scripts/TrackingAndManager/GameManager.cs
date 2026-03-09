@@ -255,6 +255,15 @@ public class GameManager : MonoBehaviour
         {
             //questionText.text = "How mentally demanding was the item you just built?";
 
+            // Before clearing, mark the just-completed model as completed in the model-order CSV.
+            // At this point, currentItemIndex has already been incremented for the next item,
+            // so the completed model corresponds to currentItemIndex - 1.
+            int completedOrderIndex = Mathf.Clamp(currentItemIndex - 1, 0, modelPrefabs.Length - 1);
+            if (RandomModelManager.Instance != null)
+            {
+                RandomModelManager.Instance.MarkModelCompleted(participantCode, trialNumber, completedOrderIndex);
+            }
+
             //clear the current model and resource brick spawn points
             foreach (Transform child in modelSpawnPoint)
                 Destroy(child.gameObject);
