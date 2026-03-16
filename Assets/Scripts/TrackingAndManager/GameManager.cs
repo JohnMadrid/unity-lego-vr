@@ -5,6 +5,8 @@ using System;
 using System.IO;
 using System.Collections.Generic;
 using TMPro; 
+using UnityEngine.UI;
+using System.Linq;
 
 /// <summary>
 /// This script manages the trial levels in a VR experiment.
@@ -116,12 +118,44 @@ public class GameManager : MonoBehaviour
     public float finalCountdownSeconds = 1f;
     // 08.08.2025 end
 
+    // 13.03.2026 begin
+    [Header("Condition Selection UI")]
+    [Tooltip("Canvas or panel that holds the experimenter condition selection UI (3 buttons + instruction text).")]
+    public GameObject conditionSelectionCanvas;
+
+    [Tooltip("Button for Condition 1 (e.g., Condition1Constant).")]
+    public Button condition1Button;
+    [Tooltip("Button for Condition 2 (e.g., Condition2Delay).")]
+    public Button condition2Button;
+    [Tooltip("Button for Condition 3 (e.g., Condition3Once).")]
+    public Button condition3Button;
+
+    [Tooltip("Image component used to color the Condition 1 button.")]
+    public Image condition1Image;
+    [Tooltip("Image component used to color the Condition 2 button.")]
+    public Image condition2Image;
+    [Tooltip("Image component used to color the Condition 3 button.")]
+    public Image condition3Image;
+
+    [Tooltip("Instruction text shown to the experimenter when the experiment is paused between conditions.")]
+    public TMP_Text conditionSelectionInstructionText;
+
+    // Default button color, cached at runtime.
+    private Color defaultButtonColor = Color.white;
+
+    // Flag to ensure finalization is only started once.
+    private bool experimentFinalizationStarted = false;
+
+    // Path where ModelOrder CSVs are written (must match RandomModelManager / ParticipantInputManager).
+    private readonly string modelOrderPath = @"D:\LegoVR\unity-lego-vr\Other_than_in_project_files\Model_Order_Data";
+    // 13.03.2026 end
+
     private void Start()
     {
         // Set target frame rate to 90 FPS for optimal VR performance
         Application.targetFrameRate = 90;
         Debug.Log("GameManager: Set target frame rate to 90 FPS for VR optimization");
-        
+
         // 16.07.2025 begin
         RandomModelManager.Instance.AssignPrefabsToGameManager(this);
         // 16.07.2025 end
@@ -133,10 +167,32 @@ public class GameManager : MonoBehaviour
         participantCode = PlayerPrefs.GetString("ParticipantCode", "P001");
         Debug.Log($"GameManager: Retrieved participant code from PlayerPrefs: '{participantCode}'");
         
+        // Inform LSL about condition/scene and emit CONDITION_START marker if LSL is present.
+        var lsl = LslOutletManager.Instance;
+        if (lsl != null)
+        {
+            string sceneName = SceneManager.GetActiveScene().name;
+            lsl.SetSessionInfo(participantCode, trialNumber, sceneName);
+            lsl.PushMarker($"CONDITION_START;{participantCode};cond={trialNumber};scene={sceneName}");
+        }
+
         // Start tracking managers with the correct participant code
         StartTrackingManagers();
         // 30.07.2025 end
         StartCoroutine(ValidateAndLoadItem());
+
+        // 13.03.2026 begin
+        // Cache the default button color from one of the condition images if available.
+        if (condition1Image != null)
+        {
+            defaultButtonColor = condition1Image.color;
+        }
+        // Hide condition selection UI on scene start (will be shown only between conditions).
+        if (conditionSelectionCanvas != null)
+        {
+            conditionSelectionCanvas.SetActive(false);
+        }
+        // 13.03.2026 end
     }
 
     /// <summary>
@@ -262,6 +318,20 @@ public class GameManager : MonoBehaviour
             if (RandomModelManager.Instance != null)
             {
                 RandomModelManager.Instance.MarkModelCompleted(participantCode, trialNumber, completedOrderIndex);
+            }
+
+            // LSL markers: model-building phase end and question-answering phase start for the completed trial.
+            var lsl = LslOutletManager.Instance;
+            if (lsl != null)
+            {
+                string completedModelName =
+                    (completedOrderIndex >= 0 && completedOrderIndex < modelPrefabs.Length && modelPrefabs[completedOrderIndex] != null)
+                        ? modelPrefabs[completedOrderIndex].name
+                        : "UnknownModel";
+                // Model building just ended for this item.
+                lsl.PushMarker($"TRIAL_PHASE;model_end;{participantCode};cond={trialNumber};item={completedOrderIndex};model={completedModelName}");
+                // Question answering just began.
+                lsl.PushMarker($"TRIAL_PHASE;question_start;{participantCode};cond={trialNumber};item={completedOrderIndex};model={completedModelName}");
             }
 
             //clear the current model and resource brick spawn points
@@ -569,6 +639,22 @@ public class GameManager : MonoBehaviour
             // Reset the question phase for the next item
             questionPhase = 1; // Reset to the first question for the next item
 
+            // LSL markers: question-answering phase end and trial end after last question answered.
+            var lsl = LslOutletManager.Instance;
+            if (lsl != null)
+            {
+                int completedOrderIndex = Mathf.Clamp(currentItemIndex - 1, 0, modelPrefabs.Length - 1);
+                string completedModelName =
+                    (completedOrderIndex >= 0 && completedOrderIndex < modelPrefabs.Length && modelPrefabs[completedOrderIndex] != null)
+                        ? modelPrefabs[completedOrderIndex].name
+                        : "UnknownModel";
+
+                // Question answering ended for this trial.
+                lsl.PushMarker($"TRIAL_PHASE;question_end;{participantCode};cond={trialNumber};item={completedOrderIndex};model={completedModelName}");
+                // Full trial ended.
+                lsl.PushMarker($"TRIAL_END;{participantCode};cond={trialNumber};item={completedOrderIndex};model={completedModelName}");
+            }
+
             // after question 3 is answered start validation for the next item
             StartCoroutine(ValidateAndLoadItem());
         }
@@ -669,11 +755,28 @@ public class GameManager : MonoBehaviour
         // -> need here to check whether need to start validation (currentItemIndex < modelPrefabs.Length) or if need ti break before next scene (currentItemIndex = modelPrefabs.Length)
         if (currentItemIndex < modelPrefabs.Length)
         {
+            // New LSL markers: trial + validation phase start.
+            var lsl = LslOutletManager.Instance;
+            if (lsl != null)
+            {
+                string modelName = modelPrefabs[currentItemIndex] != null
+                    ? modelPrefabs[currentItemIndex].name
+                    : "UnknownModel";
+                lsl.PushMarker($"TRIAL_START;{participantCode};cond={trialNumber};item={currentItemIndex};model={modelName}");
+                lsl.PushMarker($"TRIAL_PHASE;validation_start;{participantCode};cond={trialNumber};item={currentItemIndex}");
+            }
+
             // Step 1: Reset the fixation/button validation UI
             startValidator.ResetValidator();
 
             // Step 2: Wait until player completes validation
             yield return new WaitUntil(() => startValidator.IsValidated);
+
+            // LSL marker: validation phase end (immediately before model building begins).
+            if (lsl != null)
+            {
+                lsl.PushMarker($"TRIAL_PHASE;validation_end;{participantCode};cond={trialNumber};item={currentItemIndex}");
+            }
 
             // Step 3: spawn the new one in model (clearing took place in Showquestion function question phase 1)
             Instantiate(modelPrefabs[currentItemIndex], modelSpawnPoint);
@@ -687,6 +790,15 @@ public class GameManager : MonoBehaviour
             // 01.07.2025 end
 
             // 30.07.2025 begin
+
+            // LSL marker: model-building phase start.
+            if (lsl != null)
+            {
+                string modelName = modelPrefabs[currentItemIndex] != null
+                    ? modelPrefabs[currentItemIndex].name
+                    : "UnknownModel";
+                lsl.PushMarker($"TRIAL_PHASE;model_start;{participantCode};cond={trialNumber};item={currentItemIndex};model={modelName}");
+            }
 
             // Log start of model building through TrackingManagers on TrackingManager
             EyeTrackingManager etTracker = GameObject.Find("TrackingManager")?.GetComponent<EyeTrackingManager>();
@@ -729,7 +841,13 @@ public class GameManager : MonoBehaviour
             instructionCanvas.transform.Find("PressNextText").gameObject.SetActive(false);
             instructionCanvas.transform.Find("ConditionFinishText").gameObject.SetActive(true);
             // 10.07.2025 end
-            StartCoroutine(BreakBeforeNextScene());
+
+            // 13.03.2026 begin
+            // Instead of automatically loading the next scene, pause the experiment
+            // and show the experimenter condition selection UI that uses the ModelOrder CSV
+            // to determine which conditions are completed.
+            ShowExperimenterConditionSelection();
+            // 13.03.2026 end
         } 
         // 08.07.2025 end
     }
@@ -747,6 +865,10 @@ public class GameManager : MonoBehaviour
             // Keep existing break behavior for intermediate scenes
             Debug.Log($"Break time! Waiting for {breakDuration} seconds before next scene.");
             yield return new WaitForSeconds(breakDuration);
+
+            // LSL marker: condition end before loading the next condition scene.
+            SendConditionEndMarker();
+
             SceneManager.LoadScene(currentSceneIndex + 1);
         }
         else
@@ -754,6 +876,8 @@ public class GameManager : MonoBehaviour
             // 08.08.2025 begin
             // Final scene reached: run finalization flow (no 15-minute break).
             Debug.Log("All levels complete! Initiating finalization and graceful quit.");
+            // LSL marker: final condition end before experiment finalization.
+            SendConditionEndMarker();
             yield return StartCoroutine(FinalizeAndQuit());
             // 08.08.2025 end
         }
@@ -763,6 +887,14 @@ public class GameManager : MonoBehaviour
     // Finalization flow to cleanly stop logging and quit application
     private IEnumerator FinalizeAndQuit()
     {
+        // LSL marker: full experiment finished (all conditions complete).
+        var lsl = LslOutletManager.Instance;
+        if (lsl != null)
+        {
+            string sceneName = SceneManager.GetActiveScene().name;
+            lsl.PushMarker($"EXPERIMENT_END;{participantCode};cond={trialNumber};scene={sceneName}");
+        }
+
         // Step 1: Show final message so participant can read it
         if (finalMessageText != null)
         {
@@ -822,4 +954,267 @@ public class GameManager : MonoBehaviour
         yield break;
     }
     // 08.08.2025 end
+
+    // 13.03.2026 begin
+    /// <summary>
+    /// Sends a CONDITION_END marker via LSL for the current scene/condition.
+    /// </summary>
+    private void SendConditionEndMarker()
+    {
+        var lsl = LslOutletManager.Instance;
+        if (lsl != null)
+        {
+            string sceneName = SceneManager.GetActiveScene().name;
+            lsl.PushMarker($"CONDITION_END;{participantCode};cond={trialNumber};scene={sceneName}");
+        }
+    }
+
+    /// <summary>
+    /// Reads the latest ModelOrder CSV and determines, for the current participant,
+    /// whether each of the three conditions (1,2,3) is fully completed.
+    /// A condition is considered completed if there is at least one row for it
+    /// and there is no row with Completed == False.
+    /// </summary>
+    private bool TryGetConditionCompletionFromModelOrder(
+        string participant,
+        out bool cond1Complete,
+        out bool cond2Complete,
+        out bool cond3Complete)
+    {
+        cond1Complete = cond2Complete = cond3Complete = false;
+
+        try
+        {
+            if (!Directory.Exists(modelOrderPath))
+            {
+                return false;
+            }
+
+            DirectoryInfo dirInfo = new DirectoryInfo(modelOrderPath);
+            FileInfo latestCsv = dirInfo
+                .GetFiles("*_ModelOrder_*.csv")
+                .OrderByDescending(f => f.LastWriteTime)
+                .FirstOrDefault();
+
+            if (latestCsv == null)
+            {
+                return false;
+            }
+
+            bool[] hasAnyRow = new bool[4];        // 0 unused, 1..3
+            bool[] hasIncomplete = new bool[4];    // 0 unused, 1..3
+
+            string[] lines = File.ReadAllLines(latestCsv.FullName);
+            for (int i = 1; i < lines.Length; i++)
+            {
+                if (string.IsNullOrWhiteSpace(lines[i])) continue;
+
+                string[] parts = lines[i].Split(',');
+                if (parts.Length < 6) continue;
+
+                string csvParticipant = parts[0].Trim();
+                if (!string.Equals(csvParticipant, participant, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (!int.TryParse(parts[1].Trim(), out int conditionNumber))
+                {
+                    continue;
+                }
+                if (conditionNumber < 1 || conditionNumber > 3)
+                {
+                    continue;
+                }
+
+                string completedFlag = parts[5].Trim();
+                bool isCompleted = completedFlag.Equals("True", StringComparison.OrdinalIgnoreCase);
+
+                hasAnyRow[conditionNumber] = true;
+                if (!isCompleted)
+                {
+                    hasIncomplete[conditionNumber] = true;
+                }
+            }
+
+            cond1Complete = hasAnyRow[1] && !hasIncomplete[1];
+            cond2Complete = hasAnyRow[2] && !hasIncomplete[2];
+            cond3Complete = hasAnyRow[3] && !hasIncomplete[3];
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"GameManager: Failed to read ModelOrder CSV for condition completion. {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Configures the experimenter condition selection UI based on the ModelOrder CSV
+    /// for the current participant: completed conditions are green and not interactable,
+    /// incomplete conditions are normal and clickable. Also sets the instruction text.
+    /// </summary>
+    private void ConfigureConditionSelectionUI()
+    {
+        if (conditionSelectionCanvas == null ||
+            conditionSelectionInstructionText == null ||
+            condition1Button == null || condition2Button == null || condition3Button == null)
+        {
+            Debug.LogWarning("GameManager: Condition selection UI is not fully wired. Falling back to automatic scene progression.");
+            StartCoroutine(BreakBeforeNextScene());
+            return;
+        }
+
+        bool cond1Complete, cond2Complete, cond3Complete;
+        bool success = TryGetConditionCompletionFromModelOrder(participantCode, out cond1Complete, out cond2Complete, out cond3Complete);
+
+        // Build list of completed conditions for instruction text.
+        List<int> completedList = new List<int>();
+        if (cond1Complete) completedList.Add(1);
+        if (cond2Complete) completedList.Add(2);
+        if (cond3Complete) completedList.Add(3);
+
+        string completedPart;
+        if (completedList.Count > 0)
+        {
+            completedPart = $"Condition {string.Join(",", completedList)} completed.";
+        }
+        else
+        {
+            completedPart = "No conditions completed yet.";
+        }
+
+        bool allCompleted = cond1Complete && cond2Complete && cond3Complete;
+
+        if (allCompleted)
+        {
+            conditionSelectionInstructionText.text =
+                "Experiment paused. Conditions 1,2 and 3 completed. Green conditions are completed and cannot be selected. You may now end the experiment.";
+
+            // When all conditions are completed, immediately begin the finalization flow
+            // (short final message + countdown + quit), regardless of which condition scene
+            // we are currently in. Resume time so FinalizeAndQuit's WaitForSeconds work.
+            if (!experimentFinalizationStarted)
+            {
+                experimentFinalizationStarted = true;
+                Time.timeScale = 1f;
+                StartCoroutine(FinalizeAndQuit());
+            }
+        }
+        else
+        {
+            conditionSelectionInstructionText.text =
+                $"Experiment paused. Green conditions are completed and cannot be selected. {completedPart} Please select a remaining condition to continue the experiment.";
+        }
+
+        // Helper to set button state and color.
+        void SetButtonState(Button button, Image image, bool isCompleted)
+        {
+            if (button == null) return;
+
+            button.interactable = !isCompleted;
+
+            if (image != null)
+            {
+                image.color = isCompleted ? Color.green : defaultButtonColor;
+            }
+        }
+
+        SetButtonState(condition1Button, condition1Image, cond1Complete);
+        SetButtonState(condition2Button, condition2Image, cond2Complete);
+        SetButtonState(condition3Button, condition3Image, cond3Complete);
+    }
+
+    /// <summary>
+    /// Shows the experimenter condition selection canvas instead of automatically
+    /// loading the next scene when a condition has finished.
+    /// </summary>
+    private void ShowExperimenterConditionSelection()
+    {
+        if (conditionSelectionCanvas == null)
+        {
+            Debug.LogWarning("GameManager: conditionSelectionCanvas is not assigned. Falling back to automatic scene progression.");
+            StartCoroutine(BreakBeforeNextScene());
+            return;
+        }
+
+        // Pause game time while the experimenter chooses the next condition.
+        Time.timeScale = 0f;
+
+        conditionSelectionCanvas.SetActive(true);
+        ConfigureConditionSelectionUI();
+    }
+
+    /// <summary>
+    /// Experimenter clicked on Condition 1 in the selection UI.
+    /// Loads the Condition1 scene if it is not yet completed.
+    /// </summary>
+    public void OnSelectCondition1()
+    {
+        HandleConditionSelection(1, "Condition1Constant");
+    }
+
+    /// <summary>
+    /// Experimenter clicked on Condition 2 in the selection UI.
+    /// Loads the Condition2 scene if it is not yet completed.
+    /// </summary>
+    public void OnSelectCondition2()
+    {
+        HandleConditionSelection(2, "Condition2Delay");
+    }
+
+    /// <summary>
+    /// Experimenter clicked on Condition 3 in the selection UI.
+    /// Loads the Condition3 scene if it is not yet completed.
+    /// </summary>
+    public void OnSelectCondition3()
+    {
+        HandleConditionSelection(3, "Condition3Once");
+    }
+
+    /// <summary>
+    /// Shared logic for selecting a condition from the experimenter UI.
+    /// Verifies via the ModelOrder CSV that the target condition is not already
+    /// completed, then sends a CONDITION_END marker and loads the target scene.
+    /// </summary>
+    private void HandleConditionSelection(int conditionNumber, string sceneName)
+    {
+        bool cond1Complete, cond2Complete, cond3Complete;
+        bool success = TryGetConditionCompletionFromModelOrder(participantCode, out cond1Complete, out cond2Complete, out cond3Complete);
+
+        bool isCompleted = conditionNumber switch
+        {
+            1 => cond1Complete,
+            2 => cond2Complete,
+            3 => cond3Complete,
+            _ => false
+        };
+
+        if (isCompleted)
+        {
+            Debug.LogWarning($"GameManager: Condition {conditionNumber} is already completed. Selection ignored.");
+            return;
+        }
+
+        // Optional: store selected condition in PlayerPrefs for logging / LSL session info.
+        PlayerPrefs.SetInt("SelectedCondition", conditionNumber);
+        PlayerPrefs.Save();
+
+        // Send CONDITION_END marker for the current condition before switching scenes.
+        SendConditionEndMarker();
+
+        // Resume game time before loading the next condition scene.
+        Time.timeScale = 1f;
+
+        // Hide the selection UI before loading the next scene.
+        if (conditionSelectionCanvas != null)
+        {
+            conditionSelectionCanvas.SetActive(false);
+        }
+
+        Debug.Log($"GameManager: Loading condition {conditionNumber} via experimenter selection. Scene: {sceneName}");
+        SceneManager.LoadScene(sceneName);
+    }
+    // 13.03.2026 end
 }

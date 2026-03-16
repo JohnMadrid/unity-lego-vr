@@ -39,6 +39,10 @@ public class EyeTrackingManager : MonoBehaviour
     [SerializeField]
     private bool enableGazeHitDebug = false; // Checkbox in inspector to enable gaze hit debugging
 
+    [Header("LSL")]
+    [SerializeField]
+    private bool lslEnabled = true; // Toggle ET LSL streaming on/off
+
     // 30.07.2025 begin
     private bool isBuildingModel = false;
     private string modelName = "";
@@ -258,6 +262,57 @@ public class EyeTrackingManager : MonoBehaviour
                  $"{objRot.x},{objRot.y},{objRot.z},{objRot.w}";
 
             writer.WriteLine(csvEntry);
+            
+            // --- LSL numeric streaming (subset of CSV columns) ---
+            if (lslEnabled && LslOutletManager.Instance != null)
+            {
+                float[] sample =
+                {
+                    (float)gazeData.captureTime,
+                    (float)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                    Time.time,
+                    gazeData.focusDistance,
+                    gazeData.frameNumber,
+                    (float)gazeData.focusStability,
+                    (float)gazeData.status,
+
+                    gazeData.gaze.forward.x, gazeData.gaze.forward.y, gazeData.gaze.forward.z,
+                    gazeData.gaze.origin.x,  gazeData.gaze.origin.y,  gazeData.gaze.origin.z,
+
+                    gazeData.left.forward.x, gazeData.left.forward.y, gazeData.left.forward.z,
+                    gazeData.left.origin.x,  gazeData.left.origin.y,  gazeData.left.origin.z,
+
+                    gazeData.right.forward.x, gazeData.right.forward.y, gazeData.right.forward.z,
+                    gazeData.right.origin.x,  gazeData.right.origin.y,  gazeData.right.origin.z,
+
+                    eyeMeasurements.leftPupilDiameterInMM,
+                    eyeMeasurements.leftIrisDiameterInMM,
+                    eyeMeasurements.leftPupilIrisDiameterRatio,
+                    eyeMeasurements.leftEyeOpenness,
+
+                    eyeMeasurements.rightPupilDiameterInMM,
+                    eyeMeasurements.rightIrisDiameterInMM,
+                    eyeMeasurements.rightPupilIrisDiameterRatio,
+                    eyeMeasurements.rightEyeOpenness,
+
+                    eyeMeasurements.interPupillaryDistanceInMM,
+
+                    hmdPosition.x, hmdPosition.y, hmdPosition.z,
+                    hmdRotation.x, hmdRotation.y, hmdRotation.z, hmdRotation.w,
+
+                    conditionNumber,
+                    trialNumber,
+                    modelVisibilityState,
+
+                    objPos.x, objPos.y, objPos.z,
+                    objRot.x, objRot.y, objRot.z, objRot.w
+                };
+
+                var lsl = LslOutletManager.Instance;
+                // Ensure outlet with correct channel count (only first call actually creates it).
+                lsl.EnsureEtOutlet(sample.Length);
+                lsl.PushEtSample(sample);
+            }
         }
         writer.Flush();
     }
@@ -413,6 +468,12 @@ public class EyeTrackingManager : MonoBehaviour
 
         logging = true;
         Debug.Log($"Logging started: {filePath}");
+
+        // LSL marker: ET logging started.
+        if (lslEnabled && LslOutletManager.Instance != null)
+        {
+            LslOutletManager.Instance.PushMarker($"ET_LOG_START;{participantCode}");
+        }
     }
     // 29.07.2025 end
 
@@ -433,6 +494,12 @@ public class EyeTrackingManager : MonoBehaviour
 
         logging = false;
         Debug.Log($"Logging ended. Data saved at {filePath}");
+
+        // LSL marker: ET logging stopped.
+        if (lslEnabled && LslOutletManager.Instance != null)
+        {
+            LslOutletManager.Instance.PushMarker($"ET_LOG_STOP;{participantCode}");
+        }
     }
 
     /// <summary>
