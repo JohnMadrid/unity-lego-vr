@@ -204,6 +204,15 @@ public class ParticipantInputManager : MonoBehaviour
 
         Debug.Log($"ParticipantInputManager: Resuming participant '{participantCode}' at condition {selectedCondition}.");
 
+        // Update LSL session info + SESSION_RESUME marker (if LSL is present)
+        var lsl = LslOutletManager.Instance;
+        if (lsl != null)
+        {
+            string sceneName = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
+            lsl.SetSessionInfo(participantCode, selectedCondition, sceneName);
+            lsl.PushMarker($"SESSION_RESUME;{participantCode};cond={selectedCondition};scene={sceneName}");
+        }
+
         // Start experiment flow exactly as for a new participant.
         BeginExperimentWithCode(participantCode);
     }
@@ -218,6 +227,17 @@ public class ParticipantInputManager : MonoBehaviour
         PlayerPrefs.SetString("ParticipantCode", code);
         PlayerPrefs.Save();
         Debug.Log($"ParticipantInputManager: Starting experiment for participant code: '{code}'");
+
+        // Update LSL session info + SESSION_START marker (if LSL is present)
+        var lsl = LslOutletManager.Instance;
+        if (lsl != null)
+        {
+            int cond = PlayerPrefs.GetInt("SelectedCondition", 1);
+            string sceneName = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
+
+            lsl.SetSessionInfo(code, cond, sceneName);
+            lsl.PushMarker($"SESSION_START;{code};cond={cond};scene={sceneName}");
+        }
 
         tutorialGameManager.GetComponent<TutorialGameManager>().participantCode = code; // Store participant code in the game manager
 

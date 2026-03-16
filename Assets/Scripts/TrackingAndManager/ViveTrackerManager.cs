@@ -12,6 +12,9 @@ public class ViveTrackerManager : MonoBehaviour
 
     [SerializeField] public bool trackingEnabled;
 
+    [Header("LSL")]
+    [SerializeField] private bool lslEnabled = true; // Toggle BT LSL streaming on/off
+
     private GameManager gameManager;
 
     // --- Foot area settings ---
@@ -251,6 +254,35 @@ public class ViveTrackerManager : MonoBehaviour
 
         writer.WriteLine(row);
         writer.Flush();
+
+        // --- LSL numeric streaming (subset of body tracking data) ---
+        if (lslEnabled && LslOutletManager.Instance != null)
+        {
+            float[] sample =
+            {
+                rawTimestamp,
+                relativeTimestamp,
+
+                leftFootPos.x, leftFootPos.y, leftFootPos.z,
+                rightFootPos.x, rightFootPos.y, rightFootPos.z,
+
+                conditionNumber,
+                trialNumber,
+
+                model_rot_deg,
+
+                lGrabPos.x, lGrabPos.y, lGrabPos.z,
+                lGrabRot.x, lGrabRot.y, lGrabRot.z, lGrabRot.w,
+
+                rGrabPos.x, rGrabPos.y, rGrabPos.z,
+                rGrabRot.x, rGrabRot.y, rGrabRot.z, rGrabRot.w
+            };
+
+            var lsl = LslOutletManager.Instance;
+            // Use current Application.targetFrameRate as nominal BT sampling rate (e.g., 90 Hz).
+            lsl.EnsureBtOutlet(sample.Length, Application.targetFrameRate);
+            lsl.PushBtSample(sample);
+        }
     }
 
     // --- Determine / update which area a foot is in based on AreaCollider children ---
@@ -352,6 +384,12 @@ public class ViveTrackerManager : MonoBehaviour
 
         logging = true;
         Debug.Log($"Body logging started: {filePath}");
+
+        // LSL marker: BT logging started.
+        if (lslEnabled && LslOutletManager.Instance != null)
+        {
+            LslOutletManager.Instance.PushMarker($"BT_LOG_START;{participantCode}");
+        }
     }
 
     void StopLogging()
@@ -367,6 +405,12 @@ public class ViveTrackerManager : MonoBehaviour
 
         logging = false;
         Debug.Log($"Body logging ended. Data saved at {filePath}");
+
+        // LSL marker: BT logging stopped.
+        if (lslEnabled && LslOutletManager.Instance != null)
+        {
+            LslOutletManager.Instance.PushMarker($"BT_LOG_STOP;{participantCode}");
+        }
     }
 
     void OnApplicationQuit()
