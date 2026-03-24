@@ -54,6 +54,7 @@ public class EyeTrackingManager : MonoBehaviour
     // 30.07.2025 begin
     private string participantCode; // Default value, will be set in Start()
     // 30.07.2025 end
+    private int conditionNumberForFile = 0;
 
      // Cached references
      private GameManager gameManager;
@@ -429,10 +430,8 @@ public class EyeTrackingManager : MonoBehaviour
 
         // Option 1: Same file per day (append mode)
 
-        // Construct the filename using the participant code
-        // 30.07.2025 begin add participant code to filename
-        string fileName = $"{participantCode}_ET_Data_{now:yyyy-MM-dd}.csv";
-        // 30.07.2025 end
+        // Construct the filename using the participant code and condition number
+        string fileName = $"{participantCode}_ET_Data_Condition{conditionNumberForFile}_{now:yyyy-MM-dd}.csv";
         filePath = Path.Combine(logPath, fileName);
         bool fileExists = File.Exists(filePath);
 
@@ -506,6 +505,11 @@ public class EyeTrackingManager : MonoBehaviour
     /// Cleanup method called when application quits.
     /// Ensures logging is properly stopped and files are closed.
     /// </summary>
+    void OnDestroy()
+    {
+        StopLogging();
+    }
+
     void OnApplicationQuit()
     {
         StopLogging();
@@ -514,8 +518,9 @@ public class EyeTrackingManager : MonoBehaviour
     /// <summary>
     /// Public method to manually start logging. Can be called from other scripts.
     /// </summary>
-    public void StartLoggingManually()
+    public void StartLoggingManually(int conditionNumber)
     {
+        this.conditionNumberForFile = conditionNumber;
         if (!logging)
         {
             StartLogging();

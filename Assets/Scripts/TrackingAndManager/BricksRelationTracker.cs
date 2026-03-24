@@ -33,6 +33,7 @@ public class BricksRelationTracker : MonoBehaviour
 
     private GameManager gameManager;
     private string participantCode = "Unknown";
+    private int conditionNumberForFile = 0;
 
     private void Start()
     {
@@ -67,9 +68,13 @@ public class BricksRelationTracker : MonoBehaviour
         // Ensure logging is initialized lazily.
         if (!logging)
         {
+            if (gameManager == null)
+                gameManager = FindObjectOfType<GameManager>();
+            if (conditionNumberForFile == 0 && gameManager != null)
+                conditionNumberForFile = gameManager.trialNumber;
             StartLogging();
             if (!logging)
-                return; // If StartLogging failed for some reason.
+                return;
         }
 
         // Refresh GameManager reference if needed.
@@ -169,10 +174,11 @@ public class BricksRelationTracker : MonoBehaviour
     }
 
     /// <summary>
-    /// Manually start logging (mirrors pattern used in other tracking managers).
+    /// Manually start logging for a specific condition.
     /// </summary>
-    public void StartLoggingManually()
+    public void StartLoggingManually(int conditionNumber)
     {
+        this.conditionNumberForFile = conditionNumber;
         if (!logging && trackingEnabled)
             StartLogging();
     }
@@ -205,7 +211,7 @@ public class BricksRelationTracker : MonoBehaviour
             else
                 participantCode = "Unknown";
 
-            string fileName = $"{participantCode}_BR_Data_{now:yyyy-MM-dd}.csv";
+            string fileName = $"{participantCode}_BR_Data_Condition{conditionNumberForFile}_{now:yyyy-MM-dd}.csv";
             filePath = Path.Combine(logPath, fileName);
 
             bool fileExists = File.Exists(filePath);
@@ -261,6 +267,11 @@ public class BricksRelationTracker : MonoBehaviour
         {
             Debug.LogError($"BricksRelationTracker failed to stop logging cleanly: {ex}");
         }
+    }
+
+    private void OnDestroy()
+    {
+        StopLogging();
     }
 
     private void OnApplicationQuit()

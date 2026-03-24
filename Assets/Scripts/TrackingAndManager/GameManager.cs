@@ -206,20 +206,20 @@ public class GameManager : MonoBehaviour
         var eyeTrackingManager = FindObjectOfType<EyeTrackingManager>();
         if (eyeTrackingManager != null && eyeTrackingManager.trackingEnabled)
         {
-            eyeTrackingManager.StartLoggingManually();
+            eyeTrackingManager.StartLoggingManually(trialNumber);
         }
         
         var viveTrackerManager = FindObjectOfType<ViveTrackerManager>();
         if (viveTrackerManager != null && viveTrackerManager.trackingEnabled)
         {
-            viveTrackerManager.StartLoggingManually();
+            viveTrackerManager.StartLoggingManually(trialNumber);
         }
 
         // Brick relation tracking (snap events between bricks/board)
         var bricksRelationTracker = FindObjectOfType<BricksRelationTracker>();
         if (bricksRelationTracker != null && bricksRelationTracker.trackingEnabled)
         {
-            bricksRelationTracker.StartLoggingManually();
+            bricksRelationTracker.StartLoggingManually(trialNumber);
         }
     }
 
@@ -1052,7 +1052,7 @@ public class GameManager : MonoBehaviour
 
     /// <summary>
     /// Configures the experimenter condition selection UI based on the ModelOrder CSV
-    /// for the current participant: completed conditions are green and not interactable,
+    /// for the current participant: completed conditions are dark grey and not interactable,
     /// incomplete conditions are normal and clickable. Also sets the instruction text.
     /// </summary>
     private void ConfigureConditionSelectionUI()
@@ -1090,7 +1090,7 @@ public class GameManager : MonoBehaviour
         if (allCompleted)
         {
             conditionSelectionInstructionText.text =
-                "Experiment paused. Conditions 1,2 and 3 completed. Green conditions are completed and cannot be selected. You may now end the experiment.";
+                "Experiment paused. Conditions 1,2 and 3 completed. Grey conditions are completed and cannot be selected. You may now end the experiment.";
 
             // When all conditions are completed, immediately begin the finalization flow
             // (short final message + countdown + quit), regardless of which condition scene
@@ -1105,7 +1105,7 @@ public class GameManager : MonoBehaviour
         else
         {
             conditionSelectionInstructionText.text =
-                $"Experiment paused. Green conditions are completed and cannot be selected. {completedPart} Please select a remaining condition to continue the experiment.";
+                $"Experiment paused. Grey conditions are completed and cannot be selected. {completedPart} Please select a remaining condition to continue the experiment.";
         }
 
         // Helper to set button state and color.
@@ -1117,7 +1117,7 @@ public class GameManager : MonoBehaviour
 
             if (image != null)
             {
-                image.color = isCompleted ? Color.green : defaultButtonColor;
+                image.color = isCompleted ? new Color(0.3f, 0.3f, 0.3f) : defaultButtonColor;
             }
         }
 

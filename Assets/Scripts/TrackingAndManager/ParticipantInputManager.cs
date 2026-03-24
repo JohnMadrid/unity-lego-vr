@@ -1,8 +1,10 @@
 using UnityEngine;
+using UnityEngine.UI;
 using TMPro;
 using System;
 using System.IO;
 using System.Linq;
+using System.Collections.Generic;
 
 public class ParticipantInputManager : MonoBehaviour
 {
@@ -14,6 +16,14 @@ public class ParticipantInputManager : MonoBehaviour
     public GameObject resumeButton;       // Reference to ResumeButton in the UI
     public GameObject startExperimentButton; // Reference to the Start Experiment button in the UI
 
+    [Header("Condition Selection Buttons (Start Screen)")]
+    public Button condition1Button;
+    public Button condition2Button;
+    public Button condition3Button;
+    public Image condition1Image;
+    public Image condition2Image;
+    public Image condition3Image;
+
     // Stores the chosen condition (1 = Condition1Constant, 2 = Condition2Delay, 3 = Condition3Once).
     // This is set by UI controls in the TutorialVideo scene before starting the experiment.
     private int selectedCondition = 1;
@@ -21,14 +31,29 @@ public class ParticipantInputManager : MonoBehaviour
     // Path where ModelOrder CSVs are written (must match RandomModelManager.logPath).
     private readonly string modelOrderPath = @"D:\LegoVR\unity-lego-vr\Other_than_in_project_files\Model_Order_Data";
 
+    // Participant code that can be resumed (null if nothing to resume).
+    private string resumableParticipantCode = null;
+    private int resumableConditionNumber = -1;
+    private Color defaultButtonColor = Color.white;
+
     private void Start()
     {
+        if (condition1Image != null)
+        {
+            defaultButtonColor = condition1Image.color;
+        }
+
         InitializeResumeUI();
 
         // By default, hide the Start Experiment button until a condition is chosen manually.
         if (startExperimentButton != null)
         {
             startExperimentButton.SetActive(false);
+        }
+
+        if (inputField != null)
+        {
+            inputField.onValueChanged.AddListener(OnParticipantInputChanged);
         }
     }
 
@@ -75,23 +100,24 @@ public class ParticipantInputManager : MonoBehaviour
         Debug.Log($"ParticipantInputManager: Starting tracking managers with participant code: '{participantCode}'");
         
         // Find and start all tracking managers
+        int conditionNumber = 0; // Tutorial scene has no real condition
         var eyeTrackingManager = FindObjectOfType<EyeTrackingManager>();
         if (eyeTrackingManager != null && eyeTrackingManager.trackingEnabled)
         {
-            eyeTrackingManager.StartLoggingManually();
+            eyeTrackingManager.StartLoggingManually(conditionNumber);
         }
         
         var viveTrackerManager = FindObjectOfType<ViveTrackerManager>();
         if (viveTrackerManager != null && viveTrackerManager.trackingEnabled)
         {
-            viveTrackerManager.StartLoggingManually();
+            viveTrackerManager.StartLoggingManually(conditionNumber);
         }
 
         // Brick relation tracking (snap events between bricks/board)
         var bricksRelationTracker = FindObjectOfType<BricksRelationTracker>();
         if (bricksRelationTracker != null && bricksRelationTracker.trackingEnabled)
         {
-            bricksRelationTracker.StartLoggingManually();
+            bricksRelationTracker.StartLoggingManually(conditionNumber);
         }
 
     }
@@ -102,8 +128,12 @@ public class ParticipantInputManager : MonoBehaviour
     /// </summary>
     private void InitializeResumeUI()
     {
+        resumableParticipantCode = null;
+        resumableConditionNumber = -1;
+
         if (resumeButton == null)
         {
+            ConfigureConditionButtonsForResume(false);
             return;
         }
 
@@ -114,6 +144,7 @@ public class ParticipantInputManager : MonoBehaviour
         {
             if (!Directory.Exists(modelOrderPath))
             {
+                ConfigureConditionButtonsForResume(false);
                 return;
             }
 
@@ -125,6 +156,7 @@ public class ParticipantInputManager : MonoBehaviour
 
             if (latestCsv == null)
             {
+                ConfigureConditionButtonsForResume(false);
                 return;
             }
 
@@ -149,32 +181,39 @@ public class ParticipantInputManager : MonoBehaviour
 
             if (hasIncomplete)
             {
-                // Show resume button and pre-fill the input field and condition
-                // with the first incomplete participant from the latest CSV.
-                resumeButton.SetActive(true);
-
                 string participantCode;
                 int conditionNumber;
                 if (TryGetResumeTarget(out participantCode, out conditionNumber))
                 {
+                    resumableParticipantCode = participantCode;
+                    resumableConditionNumber = conditionNumber;
+
                     inputField.text = participantCode;
                     selectedCondition = Mathf.Clamp(conditionNumber, 1, 3);
 
                     PlayerPrefs.SetString("ParticipantCode", participantCode);
                     PlayerPrefs.SetInt("SelectedCondition", selectedCondition);
                     PlayerPrefs.Save();
+
+                    resumeButton.SetActive(true);
+                    ConfigureConditionButtonsForResume(true);
+                }
+                else
+                {
+                    ConfigureConditionButtonsForResume(false);
                 }
             }
             else
             {
                 resumeButton.SetActive(false);
+                ConfigureConditionButtonsForResume(false);
             }
         }
         catch (Exception ex)
         {
             Debug.LogError($"ParticipantInputManager: Failed to initialize Resume UI. {ex.Message}");
-            // In case of error, keep resume button hidden.
             resumeButton.SetActive(false);
+            ConfigureConditionButtonsForResume(false);
         }
     }
 
@@ -251,6 +290,126 @@ public class ParticipantInputManager : MonoBehaviour
 
         // Hide UI
         inputCanvas.SetActive(false);
+    }
+
+    /// <summary>
+    /// Reacts to every change of the participant input field.
+    /// Toggles between resume mode (name matches resumable participant)
+    /// and free selection mode (any other name).
+    /// </summary>
+    private void OnParticipantInputChanged(string text)
+    {
+        bool isResumable = resumableParticipantCode != null
+            && string.Equals(text.Trim(), resumableParticipantCode.Trim(), StringComparison.OrdinalIgnoreCase);
+
+        if (isResumable)
+        {
+            if (resumeButton != null) resumeButton.SetActive(true);
+            if (startExperimentButton != null) startExperimentButton.SetActive(false);
+            ConfigureConditionButtonsForResume(true);
+        }
+        else
+        {
+            if (resumeButton != null) resumeButton.SetActive(false);
+            if (startExperimentButton != null) startExperimentButton.SetActive(false);
+            ConfigureConditionButtonsForResume(false);
+        }
+    }
+
+    /// <summary>
+    /// Configures condition buttons for resume mode or free selection mode.
+    /// In resume mode: all buttons are non-interactable, completed conditions are grey.
+    /// In free mode: all buttons are interactable with default color.
+    /// </summary>
+    private void ConfigureConditionButtonsForResume(bool isResumeMode)
+    {
+        if (isResumeMode && resumableParticipantCode != null)
+        {
+            bool c1Done, c2Done, c3Done;
+            TryGetConditionCompletion(resumableParticipantCode, out c1Done, out c2Done, out c3Done);
+
+            SetConditionButtonState(condition1Button, condition1Image, completed: c1Done, clickable: false);
+            SetConditionButtonState(condition2Button, condition2Image, completed: c2Done, clickable: false);
+            SetConditionButtonState(condition3Button, condition3Image, completed: c3Done, clickable: false);
+        }
+        else
+        {
+            SetConditionButtonState(condition1Button, condition1Image, completed: false, clickable: true);
+            SetConditionButtonState(condition2Button, condition2Image, completed: false, clickable: true);
+            SetConditionButtonState(condition3Button, condition3Image, completed: false, clickable: true);
+        }
+    }
+
+    private void SetConditionButtonState(Button button, Image image, bool completed, bool clickable)
+    {
+        if (button != null)
+        {
+            button.interactable = clickable;
+        }
+        if (image != null)
+        {
+            image.color = completed ? new Color(0.3f, 0.3f, 0.3f) : defaultButtonColor;
+        }
+    }
+
+    /// <summary>
+    /// Reads the latest ModelOrder CSV and determines which of the three
+    /// conditions (1,2,3) are fully completed for the given participant.
+    /// A condition is completed when it has at least one row and no row
+    /// with Completed == False.
+    /// </summary>
+    private bool TryGetConditionCompletion(string participant,
+        out bool cond1Complete, out bool cond2Complete, out bool cond3Complete)
+    {
+        cond1Complete = cond2Complete = cond3Complete = false;
+
+        try
+        {
+            if (!Directory.Exists(modelOrderPath)) return false;
+
+            DirectoryInfo dirInfo = new DirectoryInfo(modelOrderPath);
+            FileInfo latestCsv = dirInfo
+                .GetFiles("*_ModelOrder_*.csv")
+                .OrderByDescending(f => f.LastWriteTime)
+                .FirstOrDefault();
+
+            if (latestCsv == null) return false;
+
+            bool[] hasAnyRow = new bool[4];
+            bool[] hasIncomplete = new bool[4];
+
+            string[] lines = File.ReadAllLines(latestCsv.FullName);
+            for (int i = 1; i < lines.Length; i++)
+            {
+                if (string.IsNullOrWhiteSpace(lines[i])) continue;
+
+                string[] parts = lines[i].Split(',');
+                if (parts.Length < 6) continue;
+
+                string csvParticipant = parts[0].Trim();
+                if (!string.Equals(csvParticipant, participant, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                if (!int.TryParse(parts[1].Trim(), out int condNum)) continue;
+                if (condNum < 1 || condNum > 3) continue;
+
+                string completedFlag = parts[5].Trim();
+                bool isCompleted = completedFlag.Equals("True", StringComparison.OrdinalIgnoreCase);
+
+                hasAnyRow[condNum] = true;
+                if (!isCompleted) hasIncomplete[condNum] = true;
+            }
+
+            cond1Complete = hasAnyRow[1] && !hasIncomplete[1];
+            cond2Complete = hasAnyRow[2] && !hasIncomplete[2];
+            cond3Complete = hasAnyRow[3] && !hasIncomplete[3];
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"ParticipantInputManager: Failed to read condition completion. {ex.Message}");
+            return false;
+        }
     }
 
     /// <summary>

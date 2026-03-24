@@ -41,6 +41,7 @@ public class ViveTrackerManager : MonoBehaviour
     public float model_rot_deg { get; private set; } = 0f;
 
     private string participantCode;
+    private int conditionNumberForFile = 0;
 
     void Start()
     {
@@ -325,8 +326,9 @@ public class ViveTrackerManager : MonoBehaviour
     }
 
     // --- Logging control ---
-    public void StartLoggingManually()
+    public void StartLoggingManually(int conditionNumber)
     {
+        this.conditionNumberForFile = conditionNumber;
         if (!logging && trackingEnabled)
             StartLogging();
     }
@@ -353,7 +355,7 @@ public class ViveTrackerManager : MonoBehaviour
         else
             participantCode = "Unknown";
 
-        string fileName = $"{participantCode}_BT_Data_{now:yyyy-MM-dd}.csv";
+        string fileName = $"{participantCode}_BT_Data_Condition{conditionNumberForFile}_{now:yyyy-MM-dd}.csv";
         filePath = Path.Combine(logPath, fileName);
 
         bool fileExists = File.Exists(filePath);
@@ -411,6 +413,11 @@ public class ViveTrackerManager : MonoBehaviour
         {
             LslOutletManager.Instance.PushMarker($"BT_LOG_STOP;{participantCode}");
         }
+    }
+
+    void OnDestroy()
+    {
+        StopLogging();
     }
 
     void OnApplicationQuit()
