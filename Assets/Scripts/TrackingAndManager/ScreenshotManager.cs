@@ -24,6 +24,8 @@ public class ScreenshotManager : MonoBehaviour
     /// </summary>
     public IEnumerator CaptureScreenshotsAndContinue(GameManager gameManager)
     {
+        if (gameManager != null && gameManager.IsInterrupting) yield break;
+
         // Fetch metadata from GameManager
         string participantCode = gameManager.participantCode;
         string conditionName = $"Condition{gameManager.trialNumber}";
@@ -38,9 +40,11 @@ public class ScreenshotManager : MonoBehaviour
         for (int i = 0; i < cameras.Length; i++)
         {
             yield return StartCoroutine(
-                CaptureFromCamera(cameras[i], positions[i], participantCode, conditionName, modelIndex, modelName)
+                CaptureFromCamera(cameras[i], positions[i], participantCode, conditionName, modelIndex, modelName, gameManager)
             );
         }
+
+        if (gameManager != null && gameManager.IsInterrupting) yield break;
 
         // Continue experiment flow
         gameManager.LoadNextItem();
@@ -50,10 +54,12 @@ public class ScreenshotManager : MonoBehaviour
     /// Captures a screenshot from a single camera and saves it with a detailed filename.
     /// </summary>
     private IEnumerator CaptureFromCamera(Camera cam, string position,
-        string participantCode, string conditionName, int modelIndex, string modelName)
+        string participantCode, string conditionName, int modelIndex, string modelName, GameManager gameManager)
     {
         // Wait until the frame is fully rendered
         yield return new WaitForEndOfFrame();
+
+        if (gameManager != null && gameManager.IsInterrupting) yield break;
 
         // Create a temporary render texture for capturing
         RenderTexture rt = new RenderTexture(Screen.width, Screen.height, 24);
@@ -79,7 +85,13 @@ public class ScreenshotManager : MonoBehaviour
         string fullPath = Path.Combine(screenshotPath, filename);
 
         // Save the screenshot to disk
-        File.WriteAllBytes(fullPath, screenshot.EncodeToPNG());
+        if (gameManager == null || !gameManager.IsInterrupting)
+        {
+            File.WriteAllBytes(fullPath, screenshot.EncodeToPNG());
+        }
         Debug.Log($"Screenshot saved: {fullPath}");
+
+        // Clean up the captured Texture2D object.
+        Destroy(screenshot);
     }
 }
