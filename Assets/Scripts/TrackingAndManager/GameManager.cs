@@ -146,6 +146,11 @@ public class GameManager : MonoBehaviour
     // Flag to ensure finalization is only started once.
     private bool experimentFinalizationStarted = false;
 
+    // Flag to prevent interrupt logic from running multiple times.
+    private bool interruptStarted = false;
+
+    public bool IsInterrupting => interruptStarted;
+
     // Path where ModelOrder CSVs are written (must match RandomModelManager / ParticipantInputManager).
     private readonly string modelOrderPath = @"D:\LegoVR\unity-lego-vr\Other_than_in_project_files\Model_Order_Data";
     // 13.03.2026 end
@@ -206,20 +211,20 @@ public class GameManager : MonoBehaviour
         var eyeTrackingManager = FindObjectOfType<EyeTrackingManager>();
         if (eyeTrackingManager != null && eyeTrackingManager.trackingEnabled)
         {
-            eyeTrackingManager.StartLoggingManually();
+            eyeTrackingManager.StartLoggingManually(trialNumber);
         }
         
         var viveTrackerManager = FindObjectOfType<ViveTrackerManager>();
         if (viveTrackerManager != null && viveTrackerManager.trackingEnabled)
         {
-            viveTrackerManager.StartLoggingManually();
+            viveTrackerManager.StartLoggingManually(trialNumber);
         }
 
         // Brick relation tracking (snap events between bricks/board)
         var bricksRelationTracker = FindObjectOfType<BricksRelationTracker>();
         if (bricksRelationTracker != null && bricksRelationTracker.trackingEnabled)
         {
-            bricksRelationTracker.StartLoggingManually();
+            bricksRelationTracker.StartLoggingManually(trialNumber);
         }
     }
 
@@ -955,6 +960,115 @@ public class GameManager : MonoBehaviour
     }
     // 08.08.2025 end
 
+    // 25.03.2026 begin
+    /// <summary>
+    /// Immediately stops the current run, deletes ONLY the current participant's files
+    /// for the current condition, moves them to the Windows recycle bin, and terminates.
+    /// </summary>
+    public void InterruptAndCleanupCurrentCondition()
+    {
+        if (interruptStarted) return;
+        interruptStarted = true;
+
+        // Prevent normal finalization logic from racing.
+        experimentFinalizationStarted = true;
+
+        // The experimenter condition selection UI sets timeScale=0.
+        // Ensure our interrupt coroutine runs reliably.
+        Time.timeScale = 1f;
+
+        StartCoroutine(InterruptAndCleanupCurrentConditionRoutine());
+    }
+
+    private IEnumerator InterruptAndCleanupCurrentConditionRoutine()
+    {
+        // Step 1: Stop logging so files are not locked when deleting.
+        var eyeTrackingManager = FindObjectOfType<EyeTrackingManager>();
+        if (eyeTrackingManager != null) eyeTrackingManager.StopLoggingManually();
+
+        var viveTrackerManager = FindObjectOfType<ViveTrackerManager>();
+        if (viveTrackerManager != null) viveTrackerManager.StopLoggingManually();
+
+        var bricksRelationTracker = FindObjectOfType<BricksRelationTracker>();
+        if (bricksRelationTracker != null) bricksRelationTracker.StopLoggingManually();
+
+        // Step 2: Wait one frame for IO flush.
+        yield return new WaitForEndOfFrame();
+
+        PlayerPrefs.Save();
+
+        // Step 3: Delete current-condition files for this participant only.
+        TryDeleteCurrentConditionFilesToRecycleBin();
+
+        // Step 4: Terminate immediately.
+        yield return new WaitForEndOfFrame();
+        Application.Quit();
+
+#if UNITY_EDITOR
+        UnityEditor.EditorApplication.isPlaying = false;
+#endif
+        yield break;
+    }
+
+    private void TryDeleteCurrentConditionFilesToRecycleBin()
+    {
+        // Only delete for real conditions (1..3).
+        int conditionNumber = trialNumber;
+        if (conditionNumber < 1 || conditionNumber > 3) return;
+
+        string code = participantCode;
+        if (string.IsNullOrWhiteSpace(code)) return;
+
+        // IMPORTANT: Do not touch ModelOrder CSVs (and do not delete other participants).
+        // Filenames in your project are already structured as:
+        //   {participantCode}_<TYPE>_Condition{conditionNumber}_<date>.csv
+        //   {participantCode}_Condition{conditionNumber}_Model*.png
+        string brDataPath = @"D:\LegoVR\unity-lego-vr\Other_than_in_project_files\BR_Data";
+        string btDataPath = @"D:\LegoVR\unity-lego-vr\Other_than_in_project_files\BT_Data";
+        string etDataPath = @"D:\LegoVR\unity-lego-vr\Other_than_in_project_files\ET_Data";
+        string screenshotPath = @"D:\LegoVR\unity-lego-vr\Other_than_in_project_files\Screenshot_Data";
+
+        var filesToDelete = new List<string>();
+
+        filesToDelete.AddRange(SafeGetFiles(brDataPath, $"{code}_BR_Data_Condition{conditionNumber}_*.csv"));
+        filesToDelete.AddRange(SafeGetFiles(btDataPath, $"{code}_BT_Data_Condition{conditionNumber}_*.csv"));
+        filesToDelete.AddRange(SafeGetFiles(etDataPath, $"{code}_ET_Data_Condition{conditionNumber}_*.csv"));
+
+        // Question responses are saved into Q_Data with condition-tagged filenames.
+        filesToDelete.AddRange(SafeGetFiles(questionLogPath, $"{code}_MentalLoadResponses_Condition{conditionNumber}_*.csv"));
+        filesToDelete.AddRange(SafeGetFiles(questionLogPath, $"{code}_SuccessResponses_Condition{conditionNumber}_*.csv"));
+        filesToDelete.AddRange(SafeGetFiles(questionLogPath, $"{code}_ComplexityResponses_Condition{conditionNumber}_*.csv"));
+
+        // Screenshots: {participantCode}_Condition{N}_Model..._{Front/Left/Right}_<timestamp>.png
+        filesToDelete.AddRange(SafeGetFiles(screenshotPath, $"{code}_Condition{conditionNumber}_Model*.png"));
+
+        RecycleBinDeleteUtility.DeleteFilesToRecycleBin(filesToDelete);
+    }
+
+    private static IEnumerable<string> SafeGetFiles(string dir, string pattern)
+    {
+        if (string.IsNullOrWhiteSpace(dir)) yield break;
+        if (!Directory.Exists(dir)) yield break;
+
+        string[] files = null;
+        try
+        {
+            files = Directory.GetFiles(dir, pattern, SearchOption.TopDirectoryOnly);
+        }
+        catch
+        {
+            yield break;
+        }
+
+        if (files == null) yield break;
+        foreach (var f in files)
+        {
+            if (!string.IsNullOrWhiteSpace(f)) yield return f;
+        }
+    }
+
+    // 25.03.2026 end
+
     // 13.03.2026 begin
     /// <summary>
     /// Sends a CONDITION_END marker via LSL for the current scene/condition.
@@ -1052,7 +1166,7 @@ public class GameManager : MonoBehaviour
 
     /// <summary>
     /// Configures the experimenter condition selection UI based on the ModelOrder CSV
-    /// for the current participant: completed conditions are green and not interactable,
+    /// for the current participant: completed conditions are dark grey and not interactable,
     /// incomplete conditions are normal and clickable. Also sets the instruction text.
     /// </summary>
     private void ConfigureConditionSelectionUI()
@@ -1090,7 +1204,7 @@ public class GameManager : MonoBehaviour
         if (allCompleted)
         {
             conditionSelectionInstructionText.text =
-                "Experiment paused. Conditions 1,2 and 3 completed. Green conditions are completed and cannot be selected. You may now end the experiment.";
+                "Experiment paused. Conditions 1,2 and 3 completed. Grey conditions are completed and cannot be selected. You may now end the experiment.";
 
             // When all conditions are completed, immediately begin the finalization flow
             // (short final message + countdown + quit), regardless of which condition scene
@@ -1105,7 +1219,7 @@ public class GameManager : MonoBehaviour
         else
         {
             conditionSelectionInstructionText.text =
-                $"Experiment paused. Green conditions are completed and cannot be selected. {completedPart} Please select a remaining condition to continue the experiment.";
+                $"Experiment paused. Grey conditions are completed and cannot be selected. {completedPart} Please select a remaining condition to continue the experiment.";
         }
 
         // Helper to set button state and color.
@@ -1117,7 +1231,7 @@ public class GameManager : MonoBehaviour
 
             if (image != null)
             {
-                image.color = isCompleted ? Color.green : defaultButtonColor;
+                image.color = isCompleted ? new Color(0.3f, 0.3f, 0.3f) : defaultButtonColor;
             }
         }
 
