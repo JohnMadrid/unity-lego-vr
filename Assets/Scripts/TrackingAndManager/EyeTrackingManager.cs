@@ -423,8 +423,7 @@ public class EyeTrackingManager : MonoBehaviour
         Debug.Log($"EyeTrackingManager: Final participant code: '{participantCode}'");
         
         // Define log directory path
-        string logPath = @"D:\LegoVR\unity-lego-vr\Other_than_in_project_files\ET_Data";
-        Directory.CreateDirectory(logPath);
+        string logPath = DataPaths.ETData;
 
         DateTime now = DateTime.Now;
 

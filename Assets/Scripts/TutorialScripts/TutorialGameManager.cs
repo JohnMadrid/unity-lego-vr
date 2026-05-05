@@ -56,7 +56,7 @@ public class TutorialGameManager : MonoBehaviour
 
     // 30.06.2025 end
     // 03.07.2025 begin
-    private string questionLogPath = @"D:\LegoVR\unity-lego-vr\Other_than_in_project_files\Q_Data"; // target directory
+    private string questionLogPath; // resolved at runtime in Start() via DataPaths.QData
     // 03.07.2025 end
 
     private int currentItemIndex = 0;
@@ -100,6 +100,9 @@ public class TutorialGameManager : MonoBehaviour
 
     private void Start()
     {
+        // Resolve the portable Q_Data folder (created next to the .exe / project root).
+        questionLogPath = DataPaths.QData;
+
         // Set target frame rate to 90 FPS for optimal VR performance
         Application.targetFrameRate = 90;
         Debug.Log("GameManager: Set target frame rate to 90 FPS for VR optimization");

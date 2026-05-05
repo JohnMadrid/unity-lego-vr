@@ -29,7 +29,7 @@ public class ParticipantInputManager : MonoBehaviour
     private int selectedCondition = 1;
 
     // Path where ModelOrder CSVs are written (must match RandomModelManager.logPath).
-    private readonly string modelOrderPath = @"D:\LegoVR\unity-lego-vr\Other_than_in_project_files\Model_Order_Data";
+    private string modelOrderPath => DataPaths.ModelOrderData;
 
     // Participant code that can be resumed (null if nothing to resume).
     private string resumableParticipantCode = null;
