@@ -340,8 +340,7 @@ public class ViveTrackerManager : MonoBehaviour
 
     void StartLogging()
     {
-        string logPath = @"D:\LegoVR\unity-lego-vr\Other_than_in_project_files\BT_Data";
-        Directory.CreateDirectory(logPath);
+        string logPath = DataPaths.BTData;
 
         DateTime now = DateTime.Now;
 

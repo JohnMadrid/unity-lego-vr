@@ -195,8 +195,7 @@ public class BricksRelationTracker : MonoBehaviour
     {
         try
         {
-            string logPath = @"D:\LegoVR\unity-lego-vr\Other_than_in_project_files\BR_Data";
-            Directory.CreateDirectory(logPath);
+            string logPath = DataPaths.BRData;
 
             DateTime now = DateTime.Now;
 

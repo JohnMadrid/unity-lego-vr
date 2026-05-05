@@ -19,7 +19,11 @@ public class RandomModelManager : MonoBehaviour
 
     [Header("Logging Settings")]
     [SerializeField] private bool saveTrialLogs = true;
-    [SerializeField] private string logPath = @"D:\LegoVR\unity-lego-vr\Other_than_in_project_files\Model_Order_Data";
+
+    // Resolved at runtime to a portable path next to the .exe (project root in the Editor).
+    // Previously a [SerializeField] string; the obsolete value may still be present in
+    // existing scene/prefab YAML and is harmlessly ignored by Unity until the scene is re-saved.
+    private string logPath => DataPaths.ModelOrderData;
 
     private string trialCsvPath = "";
     private List<GameObject[]> trialModels = new();

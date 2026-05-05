@@ -61,7 +61,7 @@ public class GameManager : MonoBehaviour
 
     // 30.06.2025 end
     // 03.07.2025 begin
-    private string questionLogPath = @"D:\LegoVR\unity-lego-vr\Other_than_in_project_files\Q_Data"; // target directory
+    private string questionLogPath; // resolved at runtime in Start() via DataPaths.QData
     // 03.07.2025 end
 
     private int currentItemIndex = 0;
@@ -152,11 +152,14 @@ public class GameManager : MonoBehaviour
     public bool IsInterrupting => interruptStarted;
 
     // Path where ModelOrder CSVs are written (must match RandomModelManager / ParticipantInputManager).
-    private readonly string modelOrderPath = @"D:\LegoVR\unity-lego-vr\Other_than_in_project_files\Model_Order_Data";
+    private string modelOrderPath => DataPaths.ModelOrderData;
     // 13.03.2026 end
 
     private void Start()
     {
+        // Resolve the portable Q_Data folder (created next to the .exe / project root).
+        questionLogPath = DataPaths.QData;
+
         // Set target frame rate to 90 FPS for optimal VR performance
         Application.targetFrameRate = 90;
         Debug.Log("GameManager: Set target frame rate to 90 FPS for VR optimization");
@@ -1023,10 +1026,10 @@ public class GameManager : MonoBehaviour
         // Filenames in your project are already structured as:
         //   {participantCode}_<TYPE>_Condition{conditionNumber}_<date>.csv
         //   {participantCode}_Condition{conditionNumber}_Model*.png
-        string brDataPath = @"D:\LegoVR\unity-lego-vr\Other_than_in_project_files\BR_Data";
-        string btDataPath = @"D:\LegoVR\unity-lego-vr\Other_than_in_project_files\BT_Data";
-        string etDataPath = @"D:\LegoVR\unity-lego-vr\Other_than_in_project_files\ET_Data";
-        string screenshotPath = @"D:\LegoVR\unity-lego-vr\Other_than_in_project_files\Screenshot_Data";
+        string brDataPath = DataPaths.BRData;
+        string btDataPath = DataPaths.BTData;
+        string etDataPath = DataPaths.ETData;
+        string screenshotPath = DataPaths.ScreenshotData;
 
         var filesToDelete = new List<string>();
 

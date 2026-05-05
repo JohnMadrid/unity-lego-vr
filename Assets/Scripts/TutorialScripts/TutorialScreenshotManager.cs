@@ -15,8 +15,8 @@ public class TutorialScreenshotManager : MonoBehaviour
     public Camera camRight;   
     public Camera camLeft;   
 
-    // Directory where screenshots will be saved
-    private string screenshotPath = @"D:\LegoVR\unity-lego-vr\Other_than_in_project_files\Screenshot_Data";
+    // Directory where screenshots will be saved (resolved at runtime to a portable path).
+    private string screenshotPath => DataPaths.ScreenshotData;
 
     // Fixed screenshot resolution and reusable buffers
     [SerializeField] private int targetWidth = 1600;
